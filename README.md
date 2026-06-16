@@ -1,68 +1,47 @@
-# ⚗️ ChemBot — RAG-Powered AI Tutor for Chem 110
+# ChemBot - AI Chatbot for Chem 110
 
-An AI chatbot that answers student questions strictly from uploaded course material, built as part of the **MCREU (Multi-Campus Research Experience for Undergraduates)** program at Penn State Harrisburg under Professor Abu Asaduzzaman.
+Built this as part of my summer research under Professor Abu Asaduzzaman at Penn State Harrisburg (MCREU Summer 2026). The idea was to create a chatbot that only answers from the actual course material — so it can't hallucinate or pull stuff from outside the syllabus.
 
-> **Research focus:** Measuring Retrieval-Augmented Generation (RAG) as a hallucination-reduction strategy in educational AI.
+## What it does
 
----
+- Answers chemistry questions using the uploaded course slides and notes
+- If a question isn't covered in the material, it tells you instead of making something up
+- Supports voice input (works on both Chrome and Safari)
+- Has a read-aloud button on responses
+- Remembers the last few messages so follow-up questions make sense
 
-## Features
+## Stack
 
-- **Syllabus-grounded answers** — bot only responds from course PDFs, PPTXs, and DOCXs; politely refuses off-topic questions
-- **Conversation memory** — retains last 5 exchanges per session for natural follow-up questions
-- **Voice input** — dual-path: Web Speech API (Chrome/Edge) + Groq Whisper (Safari-compatible)
-- **Text-to-speech** — read-aloud toggle with per-message speak button
-- **Topic detection** — 35+ chemistry keywords auto-labeled on each response
-- **Free stack** — no paid APIs beyond Groq's free tier
+- Flask (Python) for the backend
+- Groq API — LLaMA 3.3 70B for answers, Whisper for voice transcription
+- sentence-transformers + FAISS for searching through course content
+- Plain HTML/CSS/JS frontend, no framework
 
-## Tech Stack
+## How the RAG part works
 
-| Layer | Technology |
-|---|---|
-| Backend | Flask (Python) |
-| LLM | Groq LLaMA 3.3 70B |
-| Voice | Groq Whisper Large v3 Turbo |
-| Embeddings | sentence-transformers all-MiniLM-L6-v2 (local, free) |
-| Vector search | FAISS |
-| Frontend | Vanilla HTML/CSS/JS |
+When you ask a question, it searches through the embedded course material (PDFs, PowerPoints, Word docs) and pulls the most relevant chunks. Those chunks get passed to the LLM along with your question, and the model is told to only use that content to answer. This is the core of the research — testing whether this approach actually reduces hallucinations compared to just asking an LLM directly.
 
-## How It Works
-
-1. Course files (PDF/PPTX/DOCX) are chunked and embedded locally using `sentence-transformers`
-2. Embeddings are stored in a FAISS index
-3. On each student question, the top-5 most relevant chunks are retrieved
-4. Retrieved context + conversation history are passed to LLaMA 3.3 70B via Groq
-5. The model is instructed to answer **only** from the retrieved course material
-
-## Setup
+## Running it locally
 
 ```bash
-# 1. Clone and install
-git clone https://github.com/your-username/chembot.git
+git clone https://github.com/ompatel4151/chembot.git
 cd chembot
 python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
+```
 
-# 2. Set environment variables
-cp .env.example .env
-# Add your GROQ_API_KEY to .env
+Create a `.env` file (see `.env.example`) and add your Groq API key.
 
-# 3. Add course files and build vectorstore
-# Drop PDF/PPTX/DOCX files into data/
+Then add your course files to the `data/` folder and run:
+```bash
 python ingest_free.py
-
-# 4. Run
 python app.py
 ```
 
-## Research Context
+## Research background
 
-This project is part of the **MCREU Summer 2026** research program. The research topic is:
-
-*"Design and Development of a Syllabus-Grounded Retrieval-Augmented AI Chatbot for Middle School Coursework"* — extended to college chemistry (Chem 110).
-
-The core research question: **Does RAG measurably reduce hallucination rates in educational AI compared to a base LLM?**
+This is part of my MCREU research project at Penn State Harrisburg. The research looks at using RAG (Retrieval-Augmented Generation) to make educational AI more accurate and less likely to give students wrong information. Professor Asaduzzaman is my faculty mentor.
 
 ---
 
-Built by **Om Patel** · Penn State Harrisburg · Research Assistant under Prof. Abu Asaduzzaman
+Om Patel | Penn State Harrisburg

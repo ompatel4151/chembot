@@ -13,7 +13,6 @@ load_dotenv()
 app = Flask(__name__, static_folder="static")
 app.secret_key = os.environ.get("SECRET_KEY", "chembot-secret-2024")
 
-# ── Vectorstore ───────────────────────────────────────────────────────────────
 DOCS_FILE  = "vectorstore/docs.pkl"
 INDEX_FILE = "vectorstore/index.faiss"
 
@@ -32,87 +31,84 @@ def load_vectorstore():
             index_dim = index.d
             with open(DOCS_FILE, "rb") as f:
                 docs = pickle.load(f)
-            print(f"✅ Vectorstore: {len(docs)} chunks, dim={index_dim}")
+            print(f"Loaded vectorstore: {len(docs)} chunks")
             return True
     except Exception as e:
-        print(f"⚠️  Vectorstore load error: {e}")
+        print(f"Vectorstore load error: {e}")
     return False
 
 def load_embedder():
     global embedder
     try:
         from sentence_transformers import SentenceTransformer
-        print("⏳ Loading embedding model…")
+        print("Loading embedding model...")
         embedder = SentenceTransformer("all-MiniLM-L6-v2")
-        print("✅ Embedder ready (dim=384)")
+        print("Embedder ready")
         return True
     except Exception as e:
-        print(f"⚠️  Embedder load error: {e}")
+        print(f"Embedder load error: {e}")
         return False
 
 FAISS_READY    = load_vectorstore()
 EMBEDDER_READY = load_embedder()
 DIM_MATCH      = FAISS_READY and EMBEDDER_READY and (index_dim == EMBEDDER_DIM)
 
-# ── Groq ──────────────────────────────────────────────────────────────────────
 groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
-# ── Topic detection ───────────────────────────────────────────────────────────
 TOPIC_MAP = {
-    "acid":         "Acids & Bases",
-    "base":         "Acids & Bases",
-    "ph":           "pH Scale",
-    "neutral":      "pH Scale",
-    "titration":    "Acid-Base Titrations",
-    "indicator":    "Acid-Base Titrations",
-    "molarity":     "Concentration",
-    "concentration":"Concentration",
-    "solution":     "Solutions",
-    "solute":       "Solutions",
-    "solvent":      "Solutions",
-    "colligative":  "Colligative Properties",
-    "boiling point":"Colligative Properties",
-    "freezing":     "Colligative Properties",
-    "osmosis":      "Colligative Properties",
-    "enthalpy":     "Thermochemistry",
-    "hess":         "Hess's Law",
-    "heat":         "Heat & Temperature",
-    "temperature":  "Heat & Temperature",
-    "exothermic":   "Thermochemistry",
-    "endothermic":  "Thermochemistry",
-    "reaction":     "Chemical Reactions",
+    "acid":          "Acids & Bases",
+    "base":          "Acids & Bases",
+    "buffer":        "Acids & Bases",
+    "ph":            "pH Scale",
+    "neutral":       "pH Scale",
+    "titration":     "Acid-Base Titrations",
+    "indicator":     "Acid-Base Titrations",
+    "molarity":      "Concentration",
+    "concentration": "Concentration",
+    "solution":      "Solutions",
+    "solute":        "Solutions",
+    "solvent":       "Solutions",
+    "colligative":   "Colligative Properties",
+    "boiling point": "Colligative Properties",
+    "freezing":      "Colligative Properties",
+    "osmosis":       "Colligative Properties",
+    "enthalpy":      "Thermochemistry",
+    "hess":          "Hess's Law",
+    "heat":          "Heat & Temperature",
+    "temperature":   "Heat & Temperature",
+    "exothermic":    "Thermochemistry",
+    "endothermic":   "Thermochemistry",
+    "reaction":      "Chemical Reactions",
     "neutralization":"Chemical Reactions",
-    "salt":         "Chemical Reactions",
-    "imf":          "Intermolecular Forces",
+    "salt":          "Chemical Reactions",
+    "imf":           "Intermolecular Forces",
     "intermolecular":"Intermolecular Forces",
-    "hydrogen bond":"Intermolecular Forces",
-    "dipole":       "Intermolecular Forces",
-    "van der waals":"Intermolecular Forces",
-    "phase":        "Phase Changes",
-    "vaporization": "Phase Changes",
-    "condensation": "Phase Changes",
-    "sublimation":  "Phase Changes",
-    "specific heat":"Calorimetry",
-    "calorimetry":  "Calorimetry",
-    "energy":       "Energy",
-    "joule":        "Energy",
-    "calorie":      "Energy",
-    "buffer":       "Acids & Bases",
-    "stoichiometry":"Stoichiometry",
-    "mole":         "Stoichiometry",
+    "hydrogen bond": "Intermolecular Forces",
+    "dipole":        "Intermolecular Forces",
+    "van der waals": "Intermolecular Forces",
+    "phase":         "Phase Changes",
+    "vaporization":  "Phase Changes",
+    "condensation":  "Phase Changes",
+    "sublimation":   "Phase Changes",
+    "specific heat": "Calorimetry",
+    "calorimetry":   "Calorimetry",
+    "energy":        "Energy",
+    "joule":         "Energy",
+    "calorie":       "Energy",
+    "stoichiometry": "Stoichiometry",
+    "mole":          "Stoichiometry",
 }
 
-def detect_topic(text: str) -> str:
+def detect_topic(text):
     lower = text.lower()
     for keyword, topic in TOPIC_MAP.items():
         if keyword in lower:
             return topic
     return "General Chemistry"
 
-# ── Logging ───────────────────────────────────────────────────────────────────
 LOG_FILE = "logs/questions.json"
 
-def log_question(student: str, section: str, question: str, topic: str, answered: bool):
+def log_question(student, section, question, topic, answered):
     os.makedirs("logs", exist_ok=True)
     try:
         with open(LOG_FILE, "r") as f:
@@ -130,14 +126,13 @@ def log_question(student: str, section: str, question: str, topic: str, answered
     with open(LOG_FILE, "w") as f:
         json.dump(logs, f, indent=2)
 
-# ── Retrieval ─────────────────────────────────────────────────────────────────
-def keyword_search(query: str, top_k: int = 5):
+def keyword_search(query, top_k=5):
     q_words = set(query.lower().split())
     scored = [(len(q_words & set(d["text"].lower().split())), i) for i, d in enumerate(docs)]
     scored.sort(reverse=True)
     return [docs[i] for s, i in scored[:top_k] if s > 0]
 
-def search_top_k(query: str, k: int = 5):
+def search_top_k(query, k=5):
     if DIM_MATCH:
         try:
             vec = embedder.encode([query])[0].astype(np.float32)
@@ -146,10 +141,9 @@ def search_top_k(query: str, k: int = 5):
             if results:
                 return results
         except Exception as e:
-            print(f"Semantic search error: {e}")
+            print(f"Search error: {e}")
     return keyword_search(query, k)
 
-# ── /transcribe  — Groq Whisper ───────────────────────────────────────────────
 @app.route("/transcribe", methods=["POST"])
 def transcribe():
     if "audio" not in request.files:
@@ -175,14 +169,13 @@ def transcribe():
         except: pass
         return jsonify({"error": f"Transcription failed: {str(e)}"}), 500
 
-# ── /chat ─────────────────────────────────────────────────────────────────────
 @app.route("/chat", methods=["POST"])
 def chat():
     data     = request.get_json()
     question = (data.get("message") or "").strip()
     student  = (data.get("student") or "Student").strip()
     section  = (data.get("section") or "Unknown").strip()
-    history  = data.get("history") or []   # list of {role, content} — last 5 turns
+    history  = data.get("history") or []
 
     if not question:
         return jsonify({"error": "Empty message"}), 400
@@ -190,7 +183,7 @@ def chat():
     topic = detect_topic(question)
 
     if not docs:
-        return jsonify({"reply": "⚠️ No course material loaded. Run ingest_free.py first."})
+        return jsonify({"reply": "No course material loaded. Run ingest_free.py first."})
 
     retrieved = search_top_k(question, k=5)
     answered  = bool(retrieved)
@@ -199,7 +192,7 @@ def chat():
 
     if not retrieved:
         return jsonify({
-            "reply": "That topic doesn't appear in our course material. Try asking about acids and bases, pH, titrations, solutions, enthalpy, or intermolecular forces — topics from your Chem 110 syllabus! 🧪",
+            "reply": "That topic doesn't appear in our course material. Try asking about acids and bases, pH, titrations, solutions, enthalpy, or intermolecular forces.",
             "topic": topic
         })
 
@@ -209,22 +202,19 @@ def chat():
     )
 
     system_prompt = (
-        "You are ChemBot, a helpful and encouraging tutor for the Penn State Harrisburg Chem 110 course.\n"
-        "RULES:\n"
-        "1. Answer ONLY using the COURSE MATERIAL provided below. Do NOT use outside knowledge.\n"
-        "2. If the student asks which file, PDF, or source a topic comes from, look at the source file "
-        "names shown in brackets (e.g. [Copy of Acids, Bases, pH Scale.pptx]) in the course material "
-        "and tell them clearly.\n"
-        "3. If the answer is genuinely not in the material, say: \"That topic isn't in our current course "
-        "material. Try asking about something from the Chem 110 syllabus!\"\n"
-        "4. Be clear, concise, and encouraging. Use bullet points and bold text where helpful.\n\n"
-        f"COURSE MATERIAL:\n{context}"
+        "You are ChemBot, a helpful tutor for the Penn State Harrisburg Chem 110 course.\n"
+        "Rules:\n"
+        "1. Answer ONLY using the course material provided below. Do not use outside knowledge.\n"
+        "2. If the student asks which file or source a topic comes from, check the filenames in "
+        "brackets (e.g. [Copy of Acids, Bases, pH Scale.pptx]) and tell them.\n"
+        "3. If the topic is not in the material, say so and suggest a related topic from Chem 110.\n"
+        "4. Keep answers clear and concise. Use bullet points where it helps.\n\n"
+        f"Course material:\n{context}"
     )
 
-    # Build message list: system + last-N history + current question
     messages = [{"role": "system", "content": system_prompt}]
-    for turn in history[-5:]:   # last 5 exchanges = 10 messages max
-        role = turn.get("role")
+    for turn in history[-5:]:
+        role    = turn.get("role")
         content = turn.get("content", "")
         if role in ("user", "assistant") and content:
             messages.append({"role": role, "content": content})
@@ -240,10 +230,10 @@ def chat():
         reply = response.choices[0].message.content
     except Exception as e:
         print(f"Groq error: {e}")
-        return jsonify({"reply": f"⚠️ AI service error: {str(e)[:120]}"}), 500
+        return jsonify({"reply": f"Error reaching AI service: {str(e)[:120]}"}), 500
+
     return jsonify({"reply": reply, "topic": topic})
 
-# ── /teacher ──────────────────────────────────────────────────────────────────
 @app.route("/teacher")
 def teacher_page():
     return send_from_directory("static", "teacher.html")
@@ -266,14 +256,12 @@ def teacher_data():
     except Exception:
         logs = []
 
-    # Topic counts
     topic_counts = {}
     for entry in logs:
         t = entry.get("topic", "General")
         topic_counts[t] = topic_counts.get(t, 0) + 1
     topics_sorted = sorted(topic_counts.items(), key=lambda x: -x[1])
 
-    # Per-student
     student_map = {}
     for entry in logs:
         s = entry.get("student", "Unknown")
@@ -282,7 +270,6 @@ def teacher_data():
         student_map[s]["count"] += 1
         student_map[s]["last"] = entry.get("timestamp", "")
 
-    # Unanswered
     unanswered = [e for e in logs if not e.get("answered")]
 
     return jsonify({
@@ -293,7 +280,6 @@ def teacher_data():
         "recent":     logs[-20:]
     })
 
-# ── /status ───────────────────────────────────────────────────────────────────
 @app.route("/status")
 def status():
     return jsonify({
@@ -304,7 +290,6 @@ def status():
         "groq_key":       bool(os.environ.get("GROQ_API_KEY")),
     })
 
-# ── Serve frontend ────────────────────────────────────────────────────────────
 @app.route("/")
 def index_page():
     return send_from_directory("static", "index.html")
