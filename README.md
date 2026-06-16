@@ -57,7 +57,7 @@ python app.py
 
 ## Research Context
 
-This project is part of the **MCREU Summer 2025** research program. The research topic is:
+This project is part of the **MCREU Summer 2026** research program. The research topic is:
 
 *"Design and Development of a Syllabus-Grounded Retrieval-Augmented AI Chatbot for Middle School Coursework"* — extended to college chemistry (Chem 110).
 
