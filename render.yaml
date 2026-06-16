@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: chembot
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: TEACHER_PASSWORD
+        sync: false
+      - key: FLASK_ENV
+        value: production

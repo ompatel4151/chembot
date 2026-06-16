@@ -1,0 +1,21 @@
+# Environment & secrets
+.env
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.Python
+
+# Raw course files (professor's materials — keep local only)
+data/
+
+# Logs
+logs/
+
+# macOS
+.DS_Store
+
+# Old frontend
+Static/
