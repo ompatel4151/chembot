@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ChemBot — Instructor Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --navy:#0f2044; --navy2:#1a3260; --blue:#1e5cad; --blue-light:#2a7de1;
+      --accent:#f0a500; --accent2:#f7c948; --teal:#0ea5a0;
+      --cream:#f7f8fc; --white:#fff; --text:#1a1e2e; --text-mid:#4a5568;
+      --text-light:#a0aec0; --border:#e2e8f0; --red:#e53e3e; --green:#2f855a;
+      --radius:16px; --radius-sm:10px;
+    }
+    body { font-family:'Inter',sans-serif; background:var(--cream); color:var(--text); min-height:100vh; }
+
+    /* ── LOGIN ── */
+    #login-screen {
+      position:fixed; inset:0; z-index:50;
+      background:linear-gradient(135deg,var(--navy),var(--navy2));
+      display:flex; align-items:center; justify-content:center; padding:20px;
+    }
+    #login-screen.hidden { display:none; }
+    .login-card {
+      background:var(--white); border-radius:var(--radius); padding:34px 30px;
+      width:100%; max-width:360px; box-shadow:0 20px 60px rgba(0,0,0,0.4); text-align:center;
+    }
+    .login-icon {
+      width:60px; height:60px; border-radius:15px; margin:0 auto 16px;
+      background:linear-gradient(135deg,var(--navy),var(--blue));
+      display:flex; align-items:center; justify-content:center; font-size:28px;
+    }
+    .login-title { font-size:1.3rem; font-weight:700; color:var(--navy); margin-bottom:4px; }
+    .login-sub { font-size:0.8rem; color:var(--text-mid); margin-bottom:20px; }
+    .login-card input {
+      width:100%; padding:11px 13px; font-size:0.9rem; font-family:'Inter',sans-serif;
+      background:var(--cream); border:1.5px solid var(--border);
+      border-radius:var(--radius-sm); outline:none; margin-bottom:12px;
+    }
+    .login-card input:focus { border-color:var(--blue); }
+    .login-card button {
+      width:100%; padding:12px; font-size:0.92rem; font-weight:600; color:white;
+      background:var(--blue); border:none; border-radius:var(--radius-sm);
+      cursor:pointer; font-family:'Inter',sans-serif;
+    }
+    .login-card button:hover { background:var(--blue-light); }
+    .login-err { font-size:0.76rem; color:var(--red); margin-top:10px; min-height:16px; }
+    .login-back { display:block; margin-top:14px; font-size:0.72rem; color:var(--text-light); text-decoration:none; }
+
+    /* ── HEADER ── */
+    header {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:14px 28px; background:var(--navy); border-bottom:2px solid rgba(240,165,0,0.25);
+    }
+    .logo { display:flex; align-items:center; gap:10px; }
+    .logo-icon {
+      width:40px; height:40px; border-radius:10px;
+      background:linear-gradient(135deg,var(--blue),var(--teal));
+      display:flex; align-items:center; justify-content:center; font-size:20px;
+    }
+    .logo-title { font-size:1.15rem; font-weight:700; color:var(--accent2); }
+    .logo-sub { font-size:0.7rem; color:rgba(255,255,255,0.4); }
+    .head-actions { display:flex; gap:8px; }
+    .head-btn {
+      background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.12);
+      color:rgba(255,255,255,0.75); padding:7px 14px; border-radius:8px;
+      font-size:0.76rem; font-weight:500; cursor:pointer; font-family:'Inter',sans-serif;
+      text-decoration:none; transition:all 0.2s;
+    }
+    .head-btn:hover { background:rgba(255,255,255,0.15); color:white; }
+
+    /* ── LAYOUT ── */
+    .wrap { max-width:1120px; margin:0 auto; padding:26px 24px 60px; }
+    .section-title { font-size:0.78rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-light); margin:28px 0 12px; }
+
+    /* ── STAT CARDS ── */
+    .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; }
+    .stat {
+      background:var(--white); border:1px solid var(--border); border-radius:var(--radius);
+      padding:18px 20px; box-shadow:0 2px 10px rgba(0,0,0,0.04);
+    }
+    .stat-val { font-size:1.9rem; font-weight:800; color:var(--navy); line-height:1; }
+    .stat-label { font-size:0.76rem; color:var(--text-mid); margin-top:6px; font-weight:500; }
+    .stat.alert .stat-val { color:var(--red); }
+
+    /* ── PANELS ── */
+    .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+    @media (max-width:820px){ .grid2 { grid-template-columns:1fr; } }
+    .panel {
+      background:var(--white); border:1px solid var(--border); border-radius:var(--radius);
+      padding:20px 22px; box-shadow:0 2px 10px rgba(0,0,0,0.04);
+    }
+    .panel h3 { font-size:0.95rem; font-weight:700; color:var(--navy); margin-bottom:4px; }
+    .panel .hint { font-size:0.72rem; color:var(--text-light); margin-bottom:16px; }
+
+    /* ── BARS ── */
+    .bar-row { margin-bottom:12px; }
+    .bar-top { display:flex; justify-content:space-between; font-size:0.8rem; margin-bottom:4px; }
+    .bar-name { font-weight:600; color:var(--text); }
+    .bar-count { color:var(--text-mid); font-weight:600; }
+    .bar-track { height:8px; background:var(--cream); border-radius:6px; overflow:hidden; }
+    .bar-fill { height:100%; border-radius:6px; background:linear-gradient(90deg,var(--blue),var(--teal)); }
+    .bar-fill.red { background:linear-gradient(90deg,#e53e3e,#f0a500); }
+    .empty { font-size:0.82rem; color:var(--text-light); padding:12px 0; text-align:center; }
+
+    /* ── STUDENT TABLE ── */
+    table { width:100%; border-collapse:collapse; }
+    th { text-align:left; font-size:0.68rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-light); padding:8px 10px; border-bottom:1.5px solid var(--border); }
+    td { padding:11px 10px; font-size:0.84rem; border-bottom:1px solid var(--border); }
+    tr.clickable { cursor:pointer; transition:background 0.15s; }
+    tr.clickable:hover { background:var(--cream); }
+    .st-name { font-weight:600; color:var(--navy); }
+    .pill {
+      display:inline-block; padding:2px 9px; border-radius:20px; font-size:0.7rem; font-weight:600;
+      background:rgba(30,92,173,0.1); color:var(--blue);
+    }
+    .pill.warn { background:rgba(229,62,62,0.1); color:var(--red); }
+    .pill.ok { background:rgba(47,133,90,0.1); color:var(--green); }
+
+    /* ── DRILL-DOWN MODAL ── */
+    #drill { position:fixed; inset:0; z-index:60; background:rgba(15,32,68,0.5); display:none; align-items:center; justify-content:center; padding:20px; }
+    #drill.show { display:flex; }
+    .drill-card {
+      background:var(--white); border-radius:var(--radius); width:100%; max-width:520px;
+      max-height:85vh; overflow-y:auto; box-shadow:0 24px 70px rgba(0,0,0,0.4);
+    }
+    .drill-head { padding:20px 24px; background:var(--navy); border-radius:var(--radius) var(--radius) 0 0; display:flex; justify-content:space-between; align-items:flex-start; }
+    .drill-head h2 { font-size:1.2rem; color:white; font-weight:700; }
+    .drill-head .sec { font-size:0.76rem; color:rgba(255,255,255,0.55); margin-top:2px; }
+    .drill-close { background:rgba(255,255,255,0.1); border:none; color:white; width:30px; height:30px; border-radius:8px; cursor:pointer; font-size:16px; }
+    .drill-body { padding:20px 24px; }
+    .drill-body h4 { font-size:0.72rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-light); margin:18px 0 10px; }
+    .drill-body h4:first-child { margin-top:0; }
+    .repeat-item { display:flex; justify-content:space-between; gap:10px; padding:9px 12px; background:var(--cream); border-radius:8px; margin-bottom:7px; font-size:0.82rem; }
+    .repeat-item .rq { color:var(--text); }
+    .repeat-item .rc { color:var(--red); font-weight:700; white-space:nowrap; }
+
+    /* ── QUESTION LIST (drill-down) ── */
+    .q-item { padding:9px 12px; border-bottom:1px solid var(--border); }
+    .q-item:last-child { border-bottom:none; }
+    .q-text { font-size:0.84rem; color:var(--text); }
+    .q-meta { font-size:0.7rem; color:var(--text-light); margin-top:3px; display:flex; gap:7px; flex-wrap:wrap; align-items:center; }
+    .q-topic { color:var(--blue); font-weight:600; }
+    .q-gap { color:var(--red); font-weight:600; }
+
+    /* ── RECENT FEED ── */
+    .feed-item { padding:10px 0; border-bottom:1px solid var(--border); }
+    .feed-q { font-size:0.85rem; color:var(--text); }
+    .feed-meta { font-size:0.72rem; color:var(--text-light); margin-top:3px; display:flex; gap:8px; flex-wrap:wrap; }
+    .loading { text-align:center; padding:60px 20px; color:var(--text-light); font-size:0.9rem; }
+  </style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-icon">📊</div>
+    <div class="login-title">Instructor Dashboard</div>
+    <div class="login-sub">Enter the instructor password to view student analytics.</div>
+    <input id="pw" type="password" placeholder="Password" autocomplete="off"/>
+    <button id="login-btn">View Dashboard →</button>
+    <div class="login-err" id="login-err"></div>
+    <a class="login-back" href="/">← Back to ChemBot</a>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dash" style="display:none;">
+  <header>
+    <div class="logo">
+      <div class="logo-icon">📊</div>
+      <div>
+        <div class="logo-title">ChemBot Analytics</div>
+        <div class="logo-sub">Chem 110 · Instructor View</div>
+      </div>
+    </div>
+    <div class="head-actions">
+      <button class="head-btn" id="refresh-btn">↻ Refresh</button>
+      <a class="head-btn" href="/">Back to ChemBot</a>
+    </div>
+  </header>
+
+  <div class="wrap" id="dash-body">
+    <div class="loading">Loading analytics…</div>
+  </div>
+</div>
+
+<!-- STUDENT DRILL-DOWN -->
+<div id="drill">
+  <div class="drill-card">
+    <div class="drill-head">
+      <div>
+        <h2 id="drill-name">Student</h2>
+        <div class="sec" id="drill-sec">Section</div>
+      </div>
+      <button class="drill-close" id="drill-close">✕</button>
+    </div>
+    <div class="drill-body" id="drill-body"></div>
+  </div>
+</div>
+
+<script>
+  const $ = id => document.getElementById(id);
+  let DATA = null;
+
+  // ── Login ──
+  async function doLogin() {
+    const pw = $('pw').value;
+    $('login-err').textContent = '';
+    try {
+      const r = await fetch('/teacher/login', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ password: pw })
+      });
+      if (r.ok) { $('login-screen').classList.add('hidden'); $('dash').style.display='block'; loadData(); }
+      else { $('login-err').textContent = 'Incorrect password.'; }
+    } catch { $('login-err').textContent = 'Could not reach the server.'; }
+  }
+  $('login-btn').addEventListener('click', doLogin);
+  $('pw').addEventListener('keydown', e => { if (e.key==='Enter') doLogin(); });
+  $('pw').focus();
+
+  // ── Load + render ──
+  async function loadData() {
+    $('dash-body').innerHTML = '<div class="loading">Loading analytics…</div>';
+    try {
+      const r = await fetch('/teacher/data');
+      if (!r.ok) { $('dash-body').innerHTML = '<div class="loading">Session expired. Reload the page.</div>'; return; }
+      DATA = await r.json();
+      render();
+    } catch { $('dash-body').innerHTML = '<div class="loading">Could not load data.</div>'; }
+  }
+  $('refresh-btn').addEventListener('click', loadData);
+
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function timeAgo(iso){
+    if(!iso) return '—';
+    const d = new Date(iso), now = new Date(), s = Math.floor((now-d)/1000);
+    if (s<60) return 'just now';
+    if (s<3600) return Math.floor(s/60)+'m ago';
+    if (s<86400) return Math.floor(s/3600)+'h ago';
+    return Math.floor(s/86400)+'d ago';
+  }
+
+  function bars(rows, opts={}){
+    if (!rows || !rows.length) return '<div class="empty">No data yet.</div>';
+    const max = Math.max(...rows.map(r=>r[1])) || 1;
+    return rows.slice(0, opts.limit||6).map(([name,count])=>`
+      <div class="bar-row">
+        <div class="bar-top"><span class="bar-name">${esc(name)}</span><span class="bar-count">${count}</span></div>
+        <div class="bar-track"><div class="bar-fill ${opts.red?'red':''}" style="width:${Math.max(6,count/max*100)}%"></div></div>
+      </div>`).join('');
+  }
+
+  function render(){
+    const d = DATA;
+    const students = Object.entries(d.students||{});
+    const totalUnanswered = (d.unanswered||[]).length;
+    const topicsCovered = (d.topics||[]).length;
+
+    // Student rows sorted by activity
+    students.sort((a,b)=> b[1].count - a[1].count);
+    const studentRows = students.length ? students.map(([name,rec])=>`
+      <tr class="clickable" data-student="${esc(name)}">
+        <td class="st-name">${esc(name)}</td>
+        <td>${esc(rec.section)}</td>
+        <td>${rec.count}</td>
+        <td>${esc(rec.weak_topic)}</td>
+        <td>${rec.unanswered>0?`<span class="pill warn">${rec.unanswered} gap${rec.unanswered>1?'s':''}</span>`:`<span class="pill ok">0 gaps</span>`}</td>
+        <td>${(rec.repeats&&rec.repeats.length)?`<span class="pill warn">${rec.repeats.length}</span>`:'<span class="pill">0</span>'}</td>
+      </tr>`).join('')
+      : '<tr><td colspan="6" class="empty">No student activity yet.</td></tr>';
+
+    // Recent feed
+    const recent = (d.recent||[]).slice().reverse().slice(0,12);
+    const feed = recent.length ? recent.map(e=>`
+      <div class="feed-item">
+        <div class="feed-q">${esc(e.question)}</div>
+        <div class="feed-meta">
+          <span>${esc(e.student)}</span>·
+          <span>${esc(e.topic)}</span>·
+          <span>${e.answered?'✓ answered':'⚠ not in material'}</span>·
+          <span>${timeAgo(e.timestamp)}</span>
+        </div>
+      </div>`).join('')
+      : '<div class="empty">No questions logged yet.</div>';
+
+    $('dash-body').innerHTML = `
+      <div class="stats">
+        <div class="stat"><div class="stat-val">${d.total||0}</div><div class="stat-label">Total Questions Asked</div></div>
+        <div class="stat"><div class="stat-val">${students.length}</div><div class="stat-label">Active Students</div></div>
+        <div class="stat"><div class="stat-val">${topicsCovered}</div><div class="stat-label">Topics Covered</div></div>
+        <div class="stat ${totalUnanswered>0?'alert':''}"><div class="stat-val">${totalUnanswered}</div><div class="stat-label">Unanswered (Gaps)</div></div>
+      </div>
+
+      <div class="section-title">Where Students Struggle Most</div>
+      <div class="grid2">
+        <div class="panel">
+          <h3>Most-Asked Topics</h3>
+          <div class="hint">High volume often signals difficulty or confusion.</div>
+          ${bars(d.topics)}
+        </div>
+        <div class="panel">
+          <h3>Knowledge Gaps</h3>
+          <div class="hint">Topics ChemBot couldn't answer from the course material.</div>
+          ${bars(d.unanswered_topics, {red:true})}
+        </div>
+      </div>
+
+      <div class="section-title">Students</div>
+      <div class="panel" style="padding:14px 18px;">
+        <table>
+          <thead><tr><th>Student</th><th>Section</th><th>Questions</th><th>Top Topic</th><th>Gaps</th><th>Repeats</th></tr></thead>
+          <tbody>${studentRows}</tbody>
+        </table>
+        <div class="hint" style="margin-top:12px;">Click a student to see their topics, gaps, and repeated questions.</div>
+      </div>
+
+      <div class="section-title">Recent Activity</div>
+      <div class="panel">${feed}</div>
+    `;
+
+    document.querySelectorAll('tr.clickable').forEach(tr=>{
+      tr.addEventListener('click', ()=> openDrill(tr.dataset.student));
+    });
+  }
+
+  // ── Drill-down ──
+  function openDrill(name){
+    const rec = DATA.students[name];
+    if (!rec) return;
+    $('drill-name').textContent = name;
+    $('drill-sec').textContent = rec.section + ' · ' + rec.count + ' questions · last active ' + timeAgo(rec.last);
+
+    const topicsHtml = bars(rec.top_topics || [], {limit:8});
+    const repeatsHtml = (rec.repeats && rec.repeats.length)
+      ? rec.repeats.map(r=>`<div class="repeat-item"><span class="rq">${esc(r.question)}</span><span class="rc">×${r.count}</span></div>`).join('')
+      : '<div class="empty">No repeated questions — good sign.</div>';
+    const gapLine = rec.unanswered>0
+      ? `<span class="pill warn">${rec.unanswered} question${rec.unanswered>1?'s':''} not in course material</span>`
+      : '<span class="pill ok">No knowledge gaps</span>';
+
+    const qs = (rec.questions || []).slice().reverse();
+    const questionsHtml = qs.length ? qs.map(q=>`
+      <div class="q-item">
+        <div class="q-text">${esc(q.question)}</div>
+        <div class="q-meta">
+          <span class="q-topic">${esc(q.topic)}</span>·
+          <span>${q.answered?'✓ answered':'<span class="q-gap">⚠ not in material</span>'}</span>·
+          <span>${timeAgo(q.timestamp)}</span>
+        </div>
+      </div>`).join('')
+      : '<div class="empty">No questions yet.</div>';
+
+    $('drill-body').innerHTML = `
+      <h4>Knowledge Gaps</h4>
+      <div>${gapLine}</div>
+      <h4>Topics Asked About</h4>
+      ${topicsHtml}
+      <h4>Repeated Questions <span style="text-transform:none;color:var(--text-light);font-weight:400;">(re-asked — possible confusion)</span></h4>
+      ${repeatsHtml}
+      <h4>All Questions (${qs.length})</h4>
+      ${questionsHtml}
+    `;
+    $('drill').classList.add('show');
+  }
+  $('drill-close').addEventListener('click', ()=> $('drill').classList.remove('show'));
+  $('drill').addEventListener('click', e=>{ if (e.target.id==='drill') $('drill').classList.remove('show'); });
+</script>
+</body>
+</html>

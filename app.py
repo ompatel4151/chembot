@@ -108,14 +108,94 @@ def detect_topic(text):
 
 LOG_FILE = "logs/questions.json"
 
-def log_question(student, section, question, topic, answered):
+# When DATABASE_URL is set (e.g. on Render, pointing at Supabase Postgres),
+# questions are stored in the database so they survive server restarts.
+# Locally, with no DATABASE_URL, they fall back to logs/questions.json.
+DATABASE_URL = os.environ.get("DATABASE_URL")
+DB_READY = False
+
+def init_db():
+    global DB_READY
+    if not DATABASE_URL:
+        print("No DATABASE_URL — logging to local JSON file")
+        return False
+    try:
+        import psycopg2
+        conn = psycopg2.connect(DATABASE_URL, sslmode="require")
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS questions (
+                id        SERIAL PRIMARY KEY,
+                student   TEXT,
+                section   TEXT,
+                question  TEXT,
+                topic     TEXT,
+                answered  BOOLEAN,
+                ts        TIMESTAMPTZ DEFAULT now()
+            )
+        """)
+        conn.commit()
+        cur.close(); conn.close()
+        DB_READY = True
+        print("Database ready (Postgres)")
+        return True
+    except Exception as e:
+        print(f"DB init error, falling back to JSON: {e}")
+        return False
+
+def write_log(entry):
+    if DB_READY:
+        try:
+            import psycopg2
+            conn = psycopg2.connect(DATABASE_URL, sslmode="require")
+            cur = conn.cursor()
+            cur.execute(
+                "INSERT INTO questions (student, section, question, topic, answered, ts) "
+                "VALUES (%s, %s, %s, %s, %s, %s)",
+                (entry["student"], entry["section"], entry["question"],
+                 entry["topic"], entry["answered"], entry["timestamp"])
+            )
+            conn.commit(); cur.close(); conn.close()
+            return
+        except Exception as e:
+            print(f"DB write error, falling back to JSON: {e}")
     os.makedirs("logs", exist_ok=True)
     try:
         with open(LOG_FILE, "r") as f:
             logs = json.load(f)
     except Exception:
         logs = []
-    logs.append({
+    logs.append(entry)
+    with open(LOG_FILE, "w") as f:
+        json.dump(logs, f, indent=2)
+
+def read_logs():
+    if DB_READY:
+        try:
+            import psycopg2
+            conn = psycopg2.connect(DATABASE_URL, sslmode="require")
+            cur = conn.cursor()
+            cur.execute("SELECT student, section, question, topic, answered, ts "
+                        "FROM questions ORDER BY id ASC")
+            rows = cur.fetchall(); cur.close(); conn.close()
+            return [{
+                "student":   r[0],
+                "section":   r[1],
+                "question":  r[2],
+                "topic":     r[3],
+                "answered":  r[4],
+                "timestamp": r[5].isoformat() if r[5] else "",
+            } for r in rows]
+        except Exception as e:
+            print(f"DB read error, falling back to JSON: {e}")
+    try:
+        with open(LOG_FILE, "r") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+def log_question(student, section, question, topic, answered):
+    write_log({
         "student":   student,
         "section":   section,
         "question":  question,
@@ -123,8 +203,8 @@ def log_question(student, section, question, topic, answered):
         "answered":  answered,
         "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
     })
-    with open(LOG_FILE, "w") as f:
-        json.dump(logs, f, indent=2)
+
+init_db()
 
 def keyword_search(query, top_k=5):
     q_words = set(query.lower().split())
@@ -234,9 +314,15 @@ def chat():
 
     return jsonify({"reply": reply, "topic": topic})
 
+def _serve_static_html(filename):
+    path = os.path.join(os.path.dirname(__file__), "static", filename)
+    with open(path, "r", encoding="utf-8") as f:
+        content = f.read()
+    return content, 200, {"Content-Type": "text/html; charset=utf-8"}
+
 @app.route("/teacher")
 def teacher_page():
-    return send_from_directory("static", "teacher.html")
+    return _serve_static_html("teacher.html")
 
 @app.route("/teacher/login", methods=["POST"])
 def teacher_login():
@@ -246,38 +332,79 @@ def teacher_login():
         return jsonify({"ok": True})
     return jsonify({"ok": False}), 401
 
+def _norm_q(q):
+    """Normalize a question for repeat detection."""
+    return " ".join((q or "").lower().split()).rstrip("?.! ")
+
 @app.route("/teacher/data")
 def teacher_data():
     if not session.get("teacher"):
         return jsonify({"error": "Unauthorized"}), 401
-    try:
-        with open(LOG_FILE) as f:
-            logs = json.load(f)
-    except Exception:
-        logs = []
+    logs = read_logs()
 
+    # ── Class-wide topic frequency ──
     topic_counts = {}
+    unanswered_topics = {}
     for entry in logs:
         t = entry.get("topic", "General")
         topic_counts[t] = topic_counts.get(t, 0) + 1
+        if not entry.get("answered"):
+            unanswered_topics[t] = unanswered_topics.get(t, 0) + 1
     topics_sorted = sorted(topic_counts.items(), key=lambda x: -x[1])
+    unanswered_topics_sorted = sorted(unanswered_topics.items(), key=lambda x: -x[1])
 
+    # ── Per-student breakdown ──
     student_map = {}
     for entry in logs:
         s = entry.get("student", "Unknown")
         if s not in student_map:
-            student_map[s] = {"count": 0, "section": entry.get("section", "?"), "last": ""}
-        student_map[s]["count"] += 1
-        student_map[s]["last"] = entry.get("timestamp", "")
+            student_map[s] = {
+                "section":    entry.get("section", "?"),
+                "count":      0,
+                "last":       "",
+                "topics":     {},
+                "unanswered": 0,
+                "_qseen":     {},   # normalized question -> count (internal)
+                "repeats":    [],
+                "questions":  [],   # full list of what this student asked
+            }
+        rec = student_map[s]
+        rec["count"] += 1
+        rec["last"]    = entry.get("timestamp", "")
+        rec["section"] = entry.get("section", rec["section"])
+        topic = entry.get("topic", "General")
+        rec["topics"][topic] = rec["topics"].get(topic, 0) + 1
+        if not entry.get("answered"):
+            rec["unanswered"] += 1
+        rec["questions"].append({
+            "question":  entry.get("question", ""),
+            "topic":     topic,
+            "answered":  bool(entry.get("answered")),
+            "timestamp": entry.get("timestamp", ""),
+        })
+        nq = _norm_q(entry.get("question", ""))
+        if nq:
+            rec["_qseen"][nq] = rec["_qseen"].get(nq, 0) + 1
+
+    # Finalize per-student: sort topics, extract repeated questions, weakest topic
+    for s, rec in student_map.items():
+        rec["top_topics"] = sorted(rec["topics"].items(), key=lambda x: -x[1])
+        rec["repeats"] = sorted(
+            [{"question": q, "count": c} for q, c in rec["_qseen"].items() if c > 1],
+            key=lambda x: -x["count"]
+        )
+        rec["weak_topic"] = rec["top_topics"][0][0] if rec["top_topics"] else "—"
+        del rec["_qseen"]
 
     unanswered = [e for e in logs if not e.get("answered")]
 
     return jsonify({
-        "total":      len(logs),
-        "topics":     topics_sorted,
-        "students":   student_map,
-        "unanswered": unanswered[-20:],
-        "recent":     logs[-20:]
+        "total":             len(logs),
+        "topics":            topics_sorted,
+        "unanswered_topics": unanswered_topics_sorted,
+        "students":          student_map,
+        "unanswered":        unanswered[-30:],
+        "recent":            logs[-30:],
     })
 
 @app.route("/status")
@@ -292,10 +419,10 @@ def status():
 
 @app.route("/")
 def index_page():
-    return send_from_directory("static", "index.html")
+    return _serve_static_html("index.html")
 
 if __name__ == "__main__":
-    port  = int(os.environ.get("PORT", 5000))
+    port  = int(os.environ.get("PORT", 5001))
     debug = os.environ.get("FLASK_ENV") != "production"
     if debug:
         import webbrowser

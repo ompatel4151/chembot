@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ChemBot — Chem 110 Tutor</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --navy:       #0f2044;
+      --navy2:      #1a3260;
+      --blue:       #1e5cad;
+      --blue-light: #2a7de1;
+      --accent:     #f0a500;
+      --accent2:    #f7c948;
+      --teal:       #0ea5a0;
+      --cream:      #f7f8fc;
+      --white:      #ffffff;
+      --text:       #1a1e2e;
+      --text-mid:   #4a5568;
+      --text-light: #a0aec0;
+      --border:     #e2e8f0;
+      --radius:     18px;
+      --radius-sm:  10px;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--cream);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── HEADER ── */
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 24px;
+      background: var(--navy);
+      border-bottom: 2px solid rgba(240,165,0,0.25);
+      flex-shrink: 0; z-index: 10;
+    }
+    .logo { display: flex; align-items: center; gap: 10px; }
+    .logo-icon {
+      width: 40px; height: 40px; border-radius: 10px;
+      background: linear-gradient(135deg, var(--blue), var(--teal));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; box-shadow: 0 4px 12px rgba(14,165,160,0.35);
+    }
+    .logo-title { font-size: 1.2rem; font-weight: 700; color: var(--accent2); }
+    .logo-sub { font-size: 0.7rem; color: rgba(255,255,255,0.4); }
+    .header-right { display: flex; align-items: center; gap: 8px; }
+#status-pill {
+      display: flex; align-items: center; gap: 6px;
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+      padding: 5px 12px; border-radius: 20px;
+      font-size: 0.72rem; color: rgba(255,255,255,0.5);
+    }
+    .pill-dot { width: 7px; height: 7px; border-radius: 50%; background: #ff6b6b; transition: background 0.3s; }
+    .pill-dot.ok { background: #4ade80; box-shadow: 0 0 5px #4ade80; }
+    .tts-toggle {
+      display: flex; align-items: center; gap: 5px;
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+      padding: 5px 12px; border-radius: 20px;
+      font-size: 0.72rem; color: rgba(255,255,255,0.5);
+      cursor: pointer; transition: all 0.2s;
+    }
+    .tts-toggle.on { background: rgba(14,165,160,0.2); border-color: var(--teal); color: var(--teal); }
+
+    /* ── CHAT ── */
+    #chat-area {
+      flex: 1; overflow-y: auto; padding: 24px 20px;
+      display: flex; flex-direction: column; gap: 16px;
+    }
+    #chat-area::-webkit-scrollbar { width: 4px; }
+    #chat-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    /* ── WELCOME ── */
+    #welcome {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; flex: 1; gap: 16px; padding: 40px 20px; text-align: center;
+    }
+    .welcome-icon {
+      width: 80px; height: 80px; border-radius: 20px;
+      background: linear-gradient(135deg, var(--navy), var(--blue));
+      display: flex; align-items: center; justify-content: center; font-size: 36px;
+      box-shadow: 0 8px 30px rgba(30,92,173,0.3), 0 0 0 8px rgba(30,92,173,0.08);
+      animation: float 3s ease-in-out infinite;
+    }
+    .welcome-title { font-size: 1.7rem; font-weight: 700; color: var(--navy); }
+    .welcome-sub { font-size: 0.9rem; color: var(--text-mid); max-width: 380px; line-height: 1.6; }
+    .welcome-chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 500px; }
+    .topic-chip {
+      background: var(--navy); color: var(--accent2);
+      font-size: 0.74rem; font-weight: 600; padding: 6px 14px;
+      border-radius: 20px; cursor: pointer; border: none;
+      font-family: 'Inter', sans-serif; transition: all 0.2s;
+    }
+    .topic-chip:hover { background: var(--blue); color: white; transform: translateY(-2px); }
+    .welcome-hint { font-size: 0.76rem; color: var(--text-light); }
+
+    /* ── MESSAGES ── */
+    .message { display: flex; gap: 10px; max-width: 800px; width: 100%; animation: slideIn 0.2s ease; }
+    @keyframes slideIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+    .message.user { align-self: flex-end; flex-direction: row-reverse; }
+    .message.bot  { align-self: flex-start; }
+    .avatar {
+      width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px; margin-top: 2px;
+    }
+    .message.user .avatar { background: var(--navy); border: 1.5px solid var(--accent); }
+    .message.bot .avatar  { background: linear-gradient(135deg, var(--blue), var(--teal)); box-shadow: 0 3px 10px rgba(30,92,173,0.3); }
+    .bubble { padding: 11px 15px; font-size: 0.875rem; line-height: 1.65; max-width: calc(100% - 46px); }
+    .message.user .bubble {
+      background: var(--navy); color: rgba(255,255,255,0.92);
+      border-radius: var(--radius) var(--radius) var(--radius-sm) var(--radius);
+      box-shadow: 0 3px 12px rgba(15,32,68,0.2);
+    }
+    .message.bot .bubble {
+      background: var(--white); color: var(--text);
+      border-radius: var(--radius) var(--radius) var(--radius) var(--radius-sm);
+      border: 1px solid var(--border); box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    }
+    .topic-tag {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 0.66rem; font-weight: 600; color: var(--blue);
+      background: rgba(30,92,173,0.1); padding: 2px 8px;
+      border-radius: 20px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .voice-tag {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 0.66rem; font-weight: 600; color: var(--teal);
+      background: rgba(14,165,160,0.1); padding: 2px 8px;
+      border-radius: 20px; margin-bottom: 6px;
+    }
+    .speak-btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      margin-top: 10px; padding: 4px 10px;
+      background: transparent; border: 1px solid var(--border);
+      border-radius: 20px; cursor: pointer;
+      font-size: 0.7rem; color: var(--text-light);
+      font-family: 'Inter', sans-serif; transition: all 0.2s;
+    }
+    .speak-btn:hover { border-color: var(--blue); color: var(--blue); }
+    .speak-btn.speaking { border-color: var(--teal); color: var(--teal); background: rgba(14,165,160,0.08); }
+    .speak-btn.speaking .speak-icon { animation: speakPulse 0.6s infinite alternate; }
+    @keyframes speakPulse { from{opacity:1} to{opacity:0.4} }
+    .bubble.typing { display: flex; align-items: center; gap: 5px; padding: 16px 18px; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--blue-light); animation: blink 1.2s infinite; }
+    .dot:nth-child(2){animation-delay:0.2s} .dot:nth-child(3){animation-delay:0.4s}
+    @keyframes blink { 0%,80%,100%{transform:scale(0.8);opacity:0.4} 40%{transform:scale(1.2);opacity:1} }
+
+    /* ── INPUT ── */
+    #input-area {
+      padding: 12px 20px 16px; background: var(--cream);
+      border-top: 1.5px solid var(--border); flex-shrink: 0;
+    }
+    #voice-bar {
+      display: none; align-items: center; gap: 8px;
+      background: rgba(14,165,160,0.08); border: 1px solid rgba(14,165,160,0.25);
+      border-radius: var(--radius-sm); padding: 7px 14px;
+      margin-bottom: 8px; font-size: 0.8rem; color: var(--teal); font-weight: 600;
+    }
+    #voice-bar.active { display: flex; }
+    .rec-ring {
+      width: 10px; height: 10px; border-radius: 50%; background: var(--teal);
+      animation: ripple 1s infinite;
+    }
+    @keyframes ripple { 0%{box-shadow:0 0 0 0 rgba(14,165,160,0.5)} 100%{box-shadow:0 0 0 8px rgba(14,165,160,0)} }
+    #input-box {
+      display: flex; align-items: flex-end; gap: 8px;
+      background: var(--white); border: 1.5px solid var(--border);
+      border-radius: var(--radius); padding: 10px 10px 10px 16px;
+      transition: border-color 0.2s; box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    #input-box:focus-within { border-color: var(--blue); }
+    #msg-input {
+      flex: 1; background: transparent; border: none; outline: none;
+      color: var(--text); font-family: 'Inter', sans-serif;
+      font-size: 0.875rem; resize: none; line-height: 1.5; max-height: 120px;
+    }
+    #msg-input::placeholder { color: var(--text-light); }
+    .ibtn {
+      width: 36px; height: 36px; border-radius: 9px; border: none;
+      cursor: pointer; flex-shrink: 0; display: flex; align-items: center;
+      justify-content: center; font-size: 15px; transition: all 0.2s;
+    }
+    #voice-btn { background: var(--border); color: var(--text-mid); }
+    #voice-btn:hover { background: var(--teal); color: white; }
+    #voice-btn.recording {
+      background: rgba(14,165,160,0.12); border: 1.5px solid var(--teal); color: var(--teal);
+      animation: pulse-btn 1s infinite;
+    }
+    @keyframes pulse-btn { 0%,100%{box-shadow:none} 50%{box-shadow:0 0 0 4px rgba(14,165,160,0.2)} }
+    #send-btn { background: var(--blue); color: white; }
+    #send-btn:hover { background: var(--blue-light); transform: scale(1.05); }
+    #send-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+    .input-hint { font-size: 0.68rem; color: var(--text-light); margin-top: 6px; text-align: center; }
+    .input-hint b { color: var(--blue); }
+
+    /* ── IDENTITY GATE ── */
+    #id-overlay {
+      position: fixed; inset: 0; z-index: 100;
+      background: linear-gradient(135deg, var(--navy), var(--navy2));
+      display: flex; align-items: center; justify-content: center; padding: 20px;
+    }
+    #id-overlay.hidden { display: none; }
+    .id-card {
+      background: var(--white); border-radius: var(--radius);
+      padding: 34px 30px; width: 100%; max-width: 380px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.4); text-align: center;
+      animation: slideIn 0.3s ease;
+    }
+    .id-icon {
+      width: 64px; height: 64px; border-radius: 16px; margin: 0 auto 16px;
+      background: linear-gradient(135deg, var(--blue), var(--teal));
+      display: flex; align-items: center; justify-content: center; font-size: 30px;
+      box-shadow: 0 8px 24px rgba(30,92,173,0.35);
+    }
+    .id-title { font-size: 1.35rem; font-weight: 700; color: var(--navy); margin-bottom: 6px; }
+    .id-sub { font-size: 0.82rem; color: var(--text-mid); margin-bottom: 22px; line-height: 1.5; }
+    .id-field { text-align: left; margin-bottom: 14px; }
+    .id-field label { display: block; font-size: 0.72rem; font-weight: 600; color: var(--text-mid); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .id-field input, .id-field select {
+      width: 100%; padding: 11px 13px; font-size: 0.9rem;
+      font-family: 'Inter', sans-serif; color: var(--text);
+      background: var(--cream); border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm); outline: none; transition: border-color 0.2s;
+    }
+    .id-field input:focus, .id-field select:focus { border-color: var(--blue); }
+    .id-start {
+      width: 100%; margin-top: 8px; padding: 12px; font-size: 0.92rem; font-weight: 600;
+      color: white; background: var(--blue); border: none;
+      border-radius: var(--radius-sm); cursor: pointer; transition: all 0.2s;
+      font-family: 'Inter', sans-serif;
+    }
+    .id-start:hover { background: var(--blue-light); }
+    .id-err { font-size: 0.74rem; color: #e53e3e; margin-top: 10px; min-height: 16px; }
+    .id-teacher-link { display: block; margin-top: 16px; font-size: 0.72rem; color: var(--text-light); text-decoration: none; }
+    .id-teacher-link:hover { color: var(--blue); }
+  </style>
+</head>
+<body>
+
+<!-- IDENTITY GATE -->
+<div id="id-overlay">
+  <div class="id-card">
+    <div class="id-icon">⚗️</div>
+    <div class="id-title">Welcome to ChemBot</div>
+    <div class="id-sub">Enter your name and section so your questions are saved for your Chem 110 instructor.</div>
+    <div class="id-field">
+      <label for="id-name">Your Name</label>
+      <input id="id-name" type="text" placeholder="e.g. Om Patel" autocomplete="off"/>
+    </div>
+    <div class="id-field">
+      <label for="id-section">Class Section</label>
+      <input id="id-section" type="text" placeholder="e.g. Section 001" autocomplete="off"/>
+    </div>
+    <button class="id-start" id="id-start-btn">Start Learning →</button>
+    <div class="id-err" id="id-err"></div>
+    <a class="id-teacher-link" href="/teacher">Instructor? View the dashboard →</a>
+  </div>
+</div>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">⚗️</div>
+    <div>
+      <div class="logo-title">ChemBot</div>
+      <div class="logo-sub">Chem 110 · Penn State Harrisburg</div>
+    </div>
+  </div>
+  <div class="header-right">
+<button class="tts-toggle" id="tts-toggle">🔊 Read Aloud: OFF</button>
+    <div id="status-pill">
+      <div class="pill-dot" id="pill-dot"></div>
+      <span id="pill-label">Connecting…</span>
+    </div>
+  </div>
+</header>
+
+<!-- CHAT -->
+<div id="chat-area">
+  <div id="welcome">
+    <div class="welcome-icon">⚗️</div>
+    <div class="welcome-title">Hello, Chemist! 👋</div>
+    <div class="welcome-sub" id="welcome-sub">Ask me anything from your Chem 110 course material.</div>
+    <div class="welcome-chips">
+      <button class="topic-chip" onclick="quickAsk('What is the pH scale?')">pH Scale</button>
+      <button class="topic-chip" onclick="quickAsk('How do acids and bases react?')">Acid-Base Reactions</button>
+      <button class="topic-chip" onclick="quickAsk('What is molarity?')">Molarity</button>
+      <button class="topic-chip" onclick="quickAsk('Explain Hess\'s Law')">Hess's Law</button>
+      <button class="topic-chip" onclick="quickAsk('What is enthalpy?')">Enthalpy</button>
+      <button class="topic-chip" onclick="quickAsk('What are intermolecular forces?')">Intermolecular Forces</button>
+      <button class="topic-chip" onclick="quickAsk('What are colligative properties?')">Colligative Properties</button>
+      <button class="topic-chip" onclick="quickAsk('How does a titration work?')">Titrations</button>
+    </div>
+    <div class="welcome-hint">✍️ Type below or 🎤 tap the mic to speak</div>
+  </div>
+</div>
+
+<!-- INPUT -->
+<div id="input-area">
+  <div id="voice-bar"><div class="rec-ring"></div>Recording… tap ⏹ when done</div>
+  <div id="input-box">
+    <textarea id="msg-input" rows="1" placeholder="Ask about Chem 110…"></textarea>
+    <button class="ibtn" id="voice-btn" title="Speak your question">🎤</button>
+    <button class="ibtn" id="send-btn" title="Send">➤</button>
+  </div>
+  <div class="input-hint">Press <b>Enter</b> to send · <b>Shift+Enter</b> for new line · 🎤 to speak</div>
+</div>
+
+<script>
+  let chatHistory = [];   // [{role, content}] — last 10 items (5 exchanges)
+  let isRecording = false;
+  const MAX_HISTORY = 10;
+
+  // ── Identity gate ───────────────────────────────────────────────────────────
+  let student = localStorage.getItem('chembot_student') || '';
+  let section = localStorage.getItem('chembot_section') || '';
+
+  const idOverlay  = document.getElementById('id-overlay');
+  const idName     = document.getElementById('id-name');
+  const idSection  = document.getElementById('id-section');
+  const idStartBtn = document.getElementById('id-start-btn');
+  const idErr      = document.getElementById('id-err');
+
+  function enterApp() {
+    idOverlay.classList.add('hidden');
+    document.getElementById('welcome-sub').textContent =
+      `Hi ${student.split(' ')[0]}! Ask me anything from your Chem 110 course material.`;
+    const mi = document.getElementById('msg-input');
+    if (mi) mi.focus();
+  }
+
+  if (student && section) {
+    enterApp();
+  } else {
+    idName.focus();
+  }
+
+  function submitIdentity() {
+    const n = idName.value.trim();
+    const s = idSection.value.trim();
+    if (n.length < 2) { idErr.textContent = 'Please enter your name.'; idName.focus(); return; }
+    if (!s)           { idErr.textContent = 'Please enter your class section.'; idSection.focus(); return; }
+    student = n; section = s;
+    localStorage.setItem('chembot_student', student);
+    localStorage.setItem('chembot_section', section);
+    idErr.textContent = '';
+    enterApp();
+  }
+  idStartBtn.addEventListener('click', submitIdentity);
+  idName.addEventListener('keydown', e => { if (e.key === 'Enter') idSection.focus(); });
+  idSection.addEventListener('keydown', e => { if (e.key === 'Enter') submitIdentity(); });
+
+  checkStatus();
+
+  // ── Status ────────────────────────────────────────────────────────────────
+  async function checkStatus() {
+    try {
+      const r = await fetch('/status');
+      const d = await r.json();
+      const dot = document.getElementById('pill-dot');
+      const lbl = document.getElementById('pill-label');
+      if (d.chunks > 0 && d.groq_key) {
+        dot.classList.add('ok'); lbl.textContent = `${d.chunks} chunks loaded`;
+      } else if (!d.groq_key) {
+        lbl.textContent = 'API key missing';
+      } else {
+        lbl.textContent = 'No material loaded';
+      }
+    } catch { document.getElementById('pill-label').textContent = 'Server offline'; }
+  }
+
+  // ── DOM refs ──────────────────────────────────────────────────────────────
+  const chatArea = document.getElementById('chat-area');
+  const welcome  = document.getElementById('welcome');
+  const msgInput = document.getElementById('msg-input');
+  const sendBtn  = document.getElementById('send-btn');
+  const voiceBtn = document.getElementById('voice-btn');
+  const voiceBar = document.getElementById('voice-bar');
+
+  msgInput.addEventListener('input', () => {
+    msgInput.style.height = 'auto';
+    msgInput.style.height = Math.min(msgInput.scrollHeight, 120) + 'px';
+  });
+  msgInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  });
+  sendBtn.addEventListener('click', sendMessage);
+  function quickAsk(text) { msgInput.value = text; sendMessage(); }
+
+  // ── Send ──────────────────────────────────────────────────────────────────
+  async function sendMessage(textOverride, fromVoice = false) {
+    const msg = (textOverride || msgInput.value).trim();
+    if (!msg) return;
+
+    if (welcome.style.display !== 'none') welcome.style.display = 'none';
+    appendUser(msg, fromVoice);
+    msgInput.value = ''; msgInput.style.height = 'auto';
+    sendBtn.disabled = true;
+
+    const typId = appendTyping();
+    try {
+      const res = await fetch('/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: msg, history: chatHistory, student, section })
+      });
+      const data = await res.json();
+      removeTyping(typId);
+      const reply = data.reply || data.error || 'Something went wrong.';
+      appendBot(reply, data.topic || '');
+
+      // Update conversation memory (cap at MAX_HISTORY)
+      chatHistory.push({ role: 'user', content: msg });
+      chatHistory.push({ role: 'assistant', content: reply });
+      if (chatHistory.length > MAX_HISTORY)
+        chatHistory = chatHistory.slice(chatHistory.length - MAX_HISTORY);
+    } catch {
+      removeTyping(typId);
+      appendBot('⚠️ Could not reach the server. Make sure the Flask app is running.');
+    }
+    sendBtn.disabled = false;
+  }
+
+  function appendUser(text, fromVoice) {
+    const d = document.createElement('div');
+    d.className = 'message user';
+    d.innerHTML = `
+      <div class="avatar">🧑</div>
+      <div class="bubble">
+        ${fromVoice ? '<div class="voice-tag">🎤 Voice</div>' : ''}
+        ${esc(text)}
+      </div>`;
+    chatArea.appendChild(d); scrollBot();
+  }
+
+  function appendBot(html, topic) {
+    const d = document.createElement('div');
+    d.className = 'message bot';
+    const formatted = html
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\n/g, '<br>');
+    const bubbleId = 'bubble-' + Date.now();
+    const topicTag = topic ? `<div class="topic-tag">🧪 ${esc(topic)}</div>` : '';
+    d.innerHTML = `
+      <div class="avatar">⚗️</div>
+      <div class="bubble" id="${bubbleId}">
+        ${topicTag}${formatted}<br>
+        <button class="speak-btn" onclick="speakText(this,'${bubbleId}')">
+          <span class="speak-icon">🔊</span> <span class="speak-label">Read aloud</span>
+        </button>
+      </div>`;
+    chatArea.appendChild(d); scrollBot();
+    if (ttsEnabled) speakText(d.querySelector('.speak-btn'), bubbleId);
+  }
+
+  function appendTyping() {
+    const id = 'typ-' + Date.now();
+    const d = document.createElement('div'); d.className = 'message bot'; d.id = id;
+    d.innerHTML = `<div class="avatar">⚗️</div><div class="bubble typing"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>`;
+    chatArea.appendChild(d); scrollBot(); return id;
+  }
+  function removeTyping(id) { const el = document.getElementById(id); if (el) el.remove(); }
+  function scrollBot() { chatArea.scrollTop = chatArea.scrollHeight; }
+  function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  // ── Voice ─────────────────────────────────────────────────────────────────
+  let mediaRecorder = null, audioChunks = [];
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  function startRecordingUI() {
+    isRecording = true; voiceBtn.classList.add('recording'); voiceBtn.textContent = '⏹';
+    voiceBar.classList.add('active'); msgInput.placeholder = 'Listening… tap ⏹ when done';
+  }
+  function stopRecordingUI() {
+    isRecording = false; voiceBtn.classList.remove('recording'); voiceBtn.textContent = '🎤';
+    voiceBar.classList.remove('active'); msgInput.placeholder = 'Ask about Chem 110…';
+  }
+
+  if (SpeechRec) {
+    const recognition = new SpeechRec();
+    recognition.continuous = false; recognition.interimResults = true; recognition.lang = 'en-US';
+    recognition.onstart = () => startRecordingUI();
+    recognition.onresult = e => {
+      let interim = '', final = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) final += t; else interim += t;
+      }
+      msgInput.value = final || interim;
+      msgInput.style.height = 'auto';
+      msgInput.style.height = Math.min(msgInput.scrollHeight, 120) + 'px';
+    };
+    recognition.onend = () => { const t = msgInput.value.trim(); stopRecordingUI(); if (t) sendMessage(t, true); };
+    recognition.onerror = e => { stopRecordingUI(); if (e.error !== 'no-speech') appendBot(`⚠️ Voice error: "${e.error}". Please type instead.`); };
+    voiceBtn.addEventListener('click', () => { if (isRecording) recognition.stop(); else recognition.start(); });
+
+  } else if (window.MediaRecorder && navigator.mediaDevices) {
+    voiceBtn.addEventListener('click', async () => {
+      if (isRecording) { mediaRecorder.stop(); return; }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mimeType = ['audio/mp4','audio/webm','audio/ogg',''].find(m => !m || MediaRecorder.isTypeSupported(m)) || '';
+        mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+        audioChunks = [];
+        mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+        mediaRecorder.onstop = async () => {
+          stopRecordingUI(); stream.getTracks().forEach(t => t.stop());
+          if (!audioChunks.length) return;
+          const blob = new Blob(audioChunks, { type: mimeType || 'audio/webm' });
+          msgInput.placeholder = 'Transcribing…'; voiceBtn.disabled = true;
+          try {
+            const form = new FormData();
+            form.append('audio', blob, 'rec' + (mimeType.includes('mp4') ? '.mp4' : '.webm'));
+            const res = await fetch('/transcribe', { method: 'POST', body: form });
+            const data = await res.json();
+            voiceBtn.disabled = false; msgInput.placeholder = 'Ask about Chem 110…';
+            if (data.text && data.text.trim()) sendMessage(data.text.trim(), true);
+            else if (data.error) appendBot(`⚠️ ${data.error}`);
+          } catch {
+            voiceBtn.disabled = false; msgInput.placeholder = 'Ask about Chem 110…';
+            appendBot('⚠️ Could not transcribe. Please type your question.');
+          }
+        };
+        mediaRecorder.start(); startRecordingUI();
+      } catch { appendBot('⚠️ Mic access denied. In Safari: Settings → Safari → Microphone → Allow localhost.'); }
+    });
+  } else {
+    voiceBtn.style.opacity = '0.35'; voiceBtn.disabled = true;
+    voiceBtn.title = 'Voice not available in this browser';
+  }
+
+  // ── TTS ───────────────────────────────────────────────────────────────────
+  let ttsEnabled = false, currentUtterance = null;
+  const ttsToggleBtn = document.getElementById('tts-toggle');
+  ttsToggleBtn.addEventListener('click', () => {
+    ttsEnabled = !ttsEnabled;
+    ttsToggleBtn.textContent = ttsEnabled ? '🔊 Read Aloud: ON' : '🔊 Read Aloud: OFF';
+    ttsToggleBtn.classList.toggle('on', ttsEnabled);
+    if (!ttsEnabled && currentUtterance) {
+      window.speechSynthesis.cancel(); currentUtterance = null;
+      document.querySelectorAll('.speak-btn.speaking').forEach(b => {
+        b.classList.remove('speaking'); b.querySelector('.speak-label').textContent = 'Read aloud';
+      });
+    }
+  });
+
+  function speakText(btn, bubbleId) {
+    if (btn.classList.contains('speaking')) {
+      window.speechSynthesis.cancel(); currentUtterance = null;
+      btn.classList.remove('speaking'); btn.querySelector('.speak-label').textContent = 'Read aloud';
+      return;
+    }
+    window.speechSynthesis.cancel();
+    document.querySelectorAll('.speak-btn.speaking').forEach(b => {
+      b.classList.remove('speaking'); b.querySelector('.speak-label').textContent = 'Read aloud';
+    });
+    const bubble = document.getElementById(bubbleId);
+    const plainText = bubble.innerText.replace('Read aloud','').replace('Stop','').trim();
+    if (!plainText) return;
+    const utterance = new SpeechSynthesisUtterance(plainText);
+    utterance.rate = 0.92; utterance.pitch = 1.0; utterance.lang = 'en-US';
+    const voices = window.speechSynthesis.getVoices();
+    const preferred = voices.find(v =>
+      v.name.includes('Samantha') || v.name.includes('Karen') ||
+      v.name.includes('Daniel')   || (v.lang === 'en-US' && v.localService)
+    );
+    if (preferred) utterance.voice = preferred;
+    btn.classList.add('speaking'); btn.querySelector('.speak-label').textContent = 'Stop';
+    currentUtterance = utterance;
+    utterance.onend = utterance.onerror = () => {
+      btn.classList.remove('speaking'); btn.querySelector('.speak-label').textContent = 'Read aloud';
+      currentUtterance = null;
+    };
+    window.speechSynthesis.speak(utterance);
+  }
+  window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+</script>
+</body>
+</html>
