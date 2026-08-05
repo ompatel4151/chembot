@@ -13,5 +13,7 @@ services:
         sync: false
       - key: TEACHER_PASSWORD
         sync: false
+      - key: STUDENT_PASSWORD
+        sync: false
       - key: FLASK_ENV
         value: production

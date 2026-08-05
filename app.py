@@ -257,10 +257,13 @@ def transcribe():
 
 @app.route("/chat", methods=["POST"])
 def chat():
+    if not session.get("student_auth"):
+        return jsonify({"error": "Please log in first.", "auth": False}), 401
+
     data     = request.get_json()
     question = (data.get("message") or "").strip()
-    student  = (data.get("student") or "Student").strip()
-    section  = (data.get("section") or "Unknown").strip()
+    student  = session.get("student_name", "Student")
+    section  = session.get("student_section", "Unknown")
     history  = data.get("history") or []
 
     if not question:
@@ -325,6 +328,21 @@ def _serve_static_html(filename):
     with open(path, "r", encoding="utf-8") as f:
         content = f.read()
     return content, 200, {"Content-Type": "text/html; charset=utf-8"}
+
+@app.route("/student/login", methods=["POST"])
+def student_login():
+    data    = request.get_json() or {}
+    name    = (data.get("name") or "").strip()
+    section = (data.get("section") or "").strip()
+    pw      = data.get("password", "")
+    if len(name) < 2 or not section:
+        return jsonify({"ok": False, "error": "Name and section are required."}), 400
+    if pw != os.environ.get("STUDENT_PASSWORD", "chem110"):
+        return jsonify({"ok": False, "error": "Incorrect class password."}), 401
+    session["student_auth"]    = True
+    session["student_name"]    = name
+    session["student_section"] = section
+    return jsonify({"ok": True})
 
 @app.route("/teacher")
 def teacher_page():
@@ -421,6 +439,7 @@ def status():
         "dim_match":      DIM_MATCH,
         "embedder_ready": EMBEDDER_READY,
         "groq_key":       bool(os.environ.get("GROQ_API_KEY")),
+        "database":       DB_READY,
     })
 
 @app.route("/")

@@ -252,7 +252,7 @@
   <div class="id-card">
     <div class="id-icon">⚗️</div>
     <div class="id-title">Welcome to ChemBot</div>
-    <div class="id-sub">Enter your name and section so your questions are saved for your Chem 110 instructor.</div>
+    <div class="id-sub">Log in with your name, section, and the class password from your instructor.</div>
     <div class="id-field">
       <label for="id-name">Your Name</label>
       <input id="id-name" type="text" placeholder="e.g. Om Patel" autocomplete="off"/>
@@ -261,7 +261,11 @@
       <label for="id-section">Class Section</label>
       <input id="id-section" type="text" placeholder="e.g. Section 001" autocomplete="off"/>
     </div>
-    <button class="id-start" id="id-start-btn">Start Learning →</button>
+    <div class="id-field">
+      <label for="id-password">Class Password</label>
+      <input id="id-password" type="password" placeholder="Password from your instructor" autocomplete="off"/>
+    </div>
+    <button class="id-start" id="id-start-btn">Log In →</button>
     <div class="id-err" id="id-err"></div>
     <a class="id-teacher-link" href="/teacher">Instructor? View the dashboard →</a>
   </div>
@@ -321,15 +325,21 @@
   let isRecording = false;
   const MAX_HISTORY = 10;
 
-  // ── Identity gate ───────────────────────────────────────────────────────────
+  // ── Login gate ──────────────────────────────────────────────────────────────
   let student = localStorage.getItem('chembot_student') || '';
   let section = localStorage.getItem('chembot_section') || '';
 
   const idOverlay  = document.getElementById('id-overlay');
   const idName     = document.getElementById('id-name');
   const idSection  = document.getElementById('id-section');
+  const idPassword = document.getElementById('id-password');
   const idStartBtn = document.getElementById('id-start-btn');
   const idErr      = document.getElementById('id-err');
+
+  // Pre-fill remembered name/section; the class password is still required each visit.
+  idName.value    = student;
+  idSection.value = section;
+  (student ? idPassword : idName).focus();
 
   function enterApp() {
     idOverlay.classList.add('hidden');
@@ -339,26 +349,42 @@
     if (mi) mi.focus();
   }
 
-  if (student && section) {
-    enterApp();
-  } else {
-    idName.focus();
-  }
-
-  function submitIdentity() {
+  async function submitIdentity() {
     const n = idName.value.trim();
     const s = idSection.value.trim();
+    const p = idPassword.value;
     if (n.length < 2) { idErr.textContent = 'Please enter your name.'; idName.focus(); return; }
     if (!s)           { idErr.textContent = 'Please enter your class section.'; idSection.focus(); return; }
-    student = n; section = s;
-    localStorage.setItem('chembot_student', student);
-    localStorage.setItem('chembot_section', section);
-    idErr.textContent = '';
-    enterApp();
+    if (!p)           { idErr.textContent = 'Please enter the class password.'; idPassword.focus(); return; }
+    idErr.textContent = 'Checking…';
+    idStartBtn.disabled = true;
+    try {
+      const res = await fetch('/student/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: n, section: s, password: p })
+      });
+      const data = await res.json();
+      idStartBtn.disabled = false;
+      if (res.ok && data.ok) {
+        student = n; section = s;
+        localStorage.setItem('chembot_student', student);
+        localStorage.setItem('chembot_section', section);
+        idErr.textContent = '';
+        enterApp();
+      } else {
+        idErr.textContent = data.error || 'Login failed.';
+        idPassword.focus(); idPassword.select();
+      }
+    } catch {
+      idStartBtn.disabled = false;
+      idErr.textContent = 'Could not reach the server. Try again.';
+    }
   }
   idStartBtn.addEventListener('click', submitIdentity);
   idName.addEventListener('keydown', e => { if (e.key === 'Enter') idSection.focus(); });
-  idSection.addEventListener('keydown', e => { if (e.key === 'Enter') submitIdentity(); });
+  idSection.addEventListener('keydown', e => { if (e.key === 'Enter') idPassword.focus(); });
+  idPassword.addEventListener('keydown', e => { if (e.key === 'Enter') submitIdentity(); });
 
   checkStatus();
 
@@ -416,6 +442,13 @@
       });
       const data = await res.json();
       removeTyping(typId);
+      if (res.status === 401 && data.auth === false) {
+        idOverlay.classList.remove('hidden');
+        idErr.textContent = 'Your session expired — please log in again.';
+        idPassword.value = ''; idPassword.focus();
+        sendBtn.disabled = false;
+        return;
+      }
       const reply = data.reply || data.error || 'Something went wrong.';
       appendBot(reply, data.topic || '');
 
