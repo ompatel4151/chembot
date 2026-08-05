@@ -37,17 +37,23 @@ def load_vectorstore():
         print(f"Vectorstore load error: {e}")
     return False
 
+EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+
 def load_embedder():
     global embedder
     try:
-        from sentence_transformers import SentenceTransformer
+        from fastembed import TextEmbedding
         print("Loading embedding model...")
-        embedder = SentenceTransformer("all-MiniLM-L6-v2")
+        embedder = TextEmbedding(model_name=EMBED_MODEL)
         print("Embedder ready")
         return True
     except Exception as e:
         print(f"Embedder load error: {e}")
         return False
+
+def embed_query(text):
+    """Return a single 384-dim float32 vector for the given text."""
+    return np.array(list(embedder.embed([text]))[0], dtype=np.float32)
 
 FAISS_READY    = load_vectorstore()
 EMBEDDER_READY = load_embedder()
@@ -215,7 +221,7 @@ def keyword_search(query, top_k=5):
 def search_top_k(query, k=5):
     if DIM_MATCH:
         try:
-            vec = embedder.encode([query])[0].astype(np.float32)
+            vec = embed_query(query)
             D, I = index.search(vec.reshape(1, -1), k)
             results = [docs[i] for i in I[0] if 0 <= i < len(docs)]
             if results:

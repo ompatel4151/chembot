@@ -1,6 +1,9 @@
 # Environment & secrets
 .env
 
+# Local tooling
+.mcp.json
+
 # Python
 venv/
 __pycache__/

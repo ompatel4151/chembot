@@ -117,19 +117,13 @@ def main():
     print(f"\n✅ {len(docs)} chunks from {len(files)} file(s)")
 
     print("⏳ Loading embedding model (first run downloads ~90 MB)…")
-    from sentence_transformers import SentenceTransformer
-    model = SentenceTransformer("all-MiniLM-L6-v2")
+    from fastembed import TextEmbedding
+    model = TextEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
     print("⏳ Embedding chunks…")
-    BATCH = 64
-    all_vecs = []
-    for i in range(0, len(docs), BATCH):
-        batch = [d["text"] for d in docs[i:i + BATCH]]
-        vecs  = model.encode(batch, show_progress_bar=False)
-        all_vecs.extend(vecs)
-        print(f"   {min(i + BATCH, len(docs))}/{len(docs)}")
-
-    emb = np.array(all_vecs, dtype=np.float32)
+    texts    = [d["text"] for d in docs]
+    all_vecs = list(model.embed(texts))
+    emb      = np.array(all_vecs, dtype=np.float32)
 
     import faiss
     dim   = emb.shape[1]
