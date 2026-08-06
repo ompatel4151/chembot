@@ -492,7 +492,10 @@
           <span class="speak-icon">🔊</span> <span class="speak-label">Read aloud</span>
         </button>
       </div>`;
-    chatArea.appendChild(d); scrollBot();
+    chatArea.appendChild(d);
+    const bub = document.getElementById(bubbleId);
+    if (bub) bub.dataset.speech = html;   // raw reply text, used for read-aloud
+    scrollBot();
     if (ttsEnabled) speakText(d.querySelector('.speak-btn'), bubbleId);
   }
 
@@ -572,51 +575,102 @@
     voiceBtn.title = 'Voice not available in this browser';
   }
 
-  // ── TTS ───────────────────────────────────────────────────────────────────
-  let ttsEnabled = false, currentUtterance = null;
+  // ── TTS (read aloud) ────────────────────────────────────────────────────────
+  let ttsEnabled = false;
+  let speakQueue = [], speaking = false, activeBtn = null, chosenVoice = null;
   const ttsToggleBtn = document.getElementById('tts-toggle');
+
+  // Pick the most natural-sounding English voice the device offers.
+  function pickVoice() {
+    const voices = window.speechSynthesis.getVoices();
+    if (!voices.length) return null;
+    const prefs = [
+      'Google US English', 'Microsoft Aria', 'Microsoft Jenny', 'Microsoft Guy',
+      'Samantha', 'Karen', 'Moira', 'Aaron', 'Daniel'
+    ];
+    for (const name of prefs) {
+      const v = voices.find(vo => vo.name.includes(name) && /en/i.test(vo.lang));
+      if (v) return v;
+    }
+    return voices.find(v => v.lang && v.lang.toLowerCase().startsWith('en')) || voices[0];
+  }
+  function ensureVoice() { if (!chosenVoice) chosenVoice = pickVoice(); return chosenVoice; }
+  window.speechSynthesis.onvoiceschanged = () => { chosenVoice = pickVoice(); };
+  ensureVoice();
+
+  // Strip markdown, emoji and symbols so the voice reads clean prose.
+  function cleanForSpeech(text) {
+    return (text || '')
+      .replace(/```[\s\S]*?```/g, ' ')          // code blocks
+      .replace(/`([^`]+)`/g, '$1')              // inline code
+      .replace(/\*\*(.*?)\*\*/g, '$1')          // bold
+      .replace(/\*(.*?)\*/g, '$1')              // italics
+      .replace(/^\s*[\*\-•]\s+/gm, '')          // bullet markers
+      .replace(/^\s*#{1,6}\s+/gm, '')           // headings
+      .replace(/\[(.*?)\]\((.*?)\)/g, '$1')     // markdown links
+      .replace(/[_>#`|]/g, ' ')                 // stray markdown chars
+      .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}\u{FE0F}]/gu, ' ') // emoji
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  // Break into short sentence-sized chunks (avoids Chrome's long-text cutoff).
+  function chunkSentences(text) {
+    const parts = text.match(/[^.!?]+[.!?]+|\S[^.!?]*$/g) || [text];
+    const chunks = []; let buf = '';
+    for (let p of parts) {
+      p = p.trim(); if (!p) continue;
+      if ((buf + ' ' + p).trim().length > 170) { if (buf) chunks.push(buf); buf = p; }
+      else buf = buf ? buf + ' ' + p : p;
+    }
+    if (buf) chunks.push(buf);
+    return chunks;
+  }
+
+  function resetBtn(btn) {
+    if (!btn) return;
+    btn.classList.remove('speaking');
+    const l = btn.querySelector('.speak-label'); if (l) l.textContent = 'Read aloud';
+  }
+  function stopSpeaking() {
+    speakQueue = []; speaking = false;
+    window.speechSynthesis.cancel();
+    resetBtn(activeBtn); activeBtn = null;
+  }
+  function playNext() {
+    if (!speaking) return;
+    if (!speakQueue.length) { resetBtn(activeBtn); activeBtn = null; speaking = false; return; }
+    const chunk = speakQueue.shift();
+    const u = new SpeechSynthesisUtterance(chunk);
+    const v = ensureVoice();
+    if (v) { u.voice = v; u.lang = v.lang; } else { u.lang = 'en-US'; }
+    u.rate = 1.0; u.pitch = 1.05;   // natural pace, slightly warm
+    u.onend   = () => playNext();
+    u.onerror = () => playNext();
+    window.speechSynthesis.speak(u);
+  }
+
+  function speakText(btn, bubbleId) {
+    if (btn && btn.classList.contains('speaking')) { stopSpeaking(); return; }
+    stopSpeaking();
+    const bubble = document.getElementById(bubbleId);
+    if (!bubble) return;
+    const clean = cleanForSpeech(bubble.dataset.speech || bubble.innerText);
+    if (!clean) return;
+    speakQueue = chunkSentences(clean);
+    activeBtn = btn;
+    if (btn) { btn.classList.add('speaking'); const l = btn.querySelector('.speak-label'); if (l) l.textContent = 'Stop'; }
+    speaking = true;
+    // small delay: Chrome ignores speak() called immediately after cancel()
+    setTimeout(playNext, 90);
+  }
+
   ttsToggleBtn.addEventListener('click', () => {
     ttsEnabled = !ttsEnabled;
     ttsToggleBtn.textContent = ttsEnabled ? '🔊 Read Aloud: ON' : '🔊 Read Aloud: OFF';
     ttsToggleBtn.classList.toggle('on', ttsEnabled);
-    if (!ttsEnabled && currentUtterance) {
-      window.speechSynthesis.cancel(); currentUtterance = null;
-      document.querySelectorAll('.speak-btn.speaking').forEach(b => {
-        b.classList.remove('speaking'); b.querySelector('.speak-label').textContent = 'Read aloud';
-      });
-    }
+    if (!ttsEnabled) stopSpeaking();
   });
-
-  function speakText(btn, bubbleId) {
-    if (btn.classList.contains('speaking')) {
-      window.speechSynthesis.cancel(); currentUtterance = null;
-      btn.classList.remove('speaking'); btn.querySelector('.speak-label').textContent = 'Read aloud';
-      return;
-    }
-    window.speechSynthesis.cancel();
-    document.querySelectorAll('.speak-btn.speaking').forEach(b => {
-      b.classList.remove('speaking'); b.querySelector('.speak-label').textContent = 'Read aloud';
-    });
-    const bubble = document.getElementById(bubbleId);
-    const plainText = bubble.innerText.replace('Read aloud','').replace('Stop','').trim();
-    if (!plainText) return;
-    const utterance = new SpeechSynthesisUtterance(plainText);
-    utterance.rate = 0.92; utterance.pitch = 1.0; utterance.lang = 'en-US';
-    const voices = window.speechSynthesis.getVoices();
-    const preferred = voices.find(v =>
-      v.name.includes('Samantha') || v.name.includes('Karen') ||
-      v.name.includes('Daniel')   || (v.lang === 'en-US' && v.localService)
-    );
-    if (preferred) utterance.voice = preferred;
-    btn.classList.add('speaking'); btn.querySelector('.speak-label').textContent = 'Stop';
-    currentUtterance = utterance;
-    utterance.onend = utterance.onerror = () => {
-      btn.classList.remove('speaking'); btn.querySelector('.speak-label').textContent = 'Read aloud';
-      currentUtterance = null;
-    };
-    window.speechSynthesis.speak(utterance);
-  }
-  window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
 </script>
 </body>
 </html>
