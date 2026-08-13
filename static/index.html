@@ -578,6 +578,7 @@
   // ── TTS (read aloud) ────────────────────────────────────────────────────────
   let ttsEnabled = false;
   let speakQueue = [], speaking = false, activeBtn = null, chosenVoice = null;
+  let speakSession = 0;   // bumped on every stop/start so stale callbacks bail out
   const ttsToggleBtn = document.getElementById('tts-toggle');
 
   // Pick the most natural-sounding English voice the device offers.
@@ -615,8 +616,12 @@
   }
 
   // Break into short sentence-sized chunks (avoids Chrome's long-text cutoff).
+  // Decimal points ("0.5 mol", "pH 7.4") are shielded so they aren't treated as
+  // sentence ends — otherwise the voice reads "zero" "five" instead of "zero point five".
+  const DEC = '\u0001';
   function chunkSentences(text) {
-    const parts = text.match(/[^.!?]+[.!?]+|\S[^.!?]*$/g) || [text];
+    const shielded = text.replace(/(\d)\.(\d)/g, '$1' + DEC + '$2');
+    const parts = shielded.match(/[^.!?]+[.!?]+|\S[^.!?]*$/g) || [shielded];
     const chunks = []; let buf = '';
     for (let p of parts) {
       p = p.trim(); if (!p) continue;
@@ -624,7 +629,7 @@
       else buf = buf ? buf + ' ' + p : p;
     }
     if (buf) chunks.push(buf);
-    return chunks;
+    return chunks.map(c => c.split(DEC).join('.'));
   }
 
   function resetBtn(btn) {
@@ -633,20 +638,21 @@
     const l = btn.querySelector('.speak-label'); if (l) l.textContent = 'Read aloud';
   }
   function stopSpeaking() {
+    speakSession++;                 // any pending callback/timer is now stale
     speakQueue = []; speaking = false;
     window.speechSynthesis.cancel();
     resetBtn(activeBtn); activeBtn = null;
   }
-  function playNext() {
-    if (!speaking) return;
+  function playNext(session) {
+    if (session !== speakSession || !speaking) return;
     if (!speakQueue.length) { resetBtn(activeBtn); activeBtn = null; speaking = false; return; }
     const chunk = speakQueue.shift();
     const u = new SpeechSynthesisUtterance(chunk);
     const v = ensureVoice();
     if (v) { u.voice = v; u.lang = v.lang; } else { u.lang = 'en-US'; }
     u.rate = 1.0; u.pitch = 1.05;   // natural pace, slightly warm
-    u.onend   = () => playNext();
-    u.onerror = () => playNext();
+    u.onend   = () => playNext(session);
+    u.onerror = () => playNext(session);
     window.speechSynthesis.speak(u);
   }
 
@@ -661,8 +667,9 @@
     activeBtn = btn;
     if (btn) { btn.classList.add('speaking'); const l = btn.querySelector('.speak-label'); if (l) l.textContent = 'Stop'; }
     speaking = true;
+    const session = speakSession;   // captured after stopSpeaking() bumped it
     // small delay: Chrome ignores speak() called immediately after cancel()
-    setTimeout(playNext, 90);
+    setTimeout(() => playNext(session), 90);
   }
 
   ttsToggleBtn.addEventListener('click', () => {
