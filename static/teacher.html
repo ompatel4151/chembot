@@ -235,7 +235,7 @@
   }
   $('refresh-btn').addEventListener('click', loadData);
 
-  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
   function timeAgo(iso){
     if(!iso) return '—';
     const d = new Date(iso), now = new Date(), s = Math.floor((now-d)/1000);

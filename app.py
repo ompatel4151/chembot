@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import pickle
 import tempfile
@@ -337,6 +338,13 @@ def student_login():
     pw      = data.get("password", "")
     if len(name) < 2 or not section:
         return jsonify({"ok": False, "error": "Name and section are required."}), 400
+    if len(name) > 60 or len(section) > 40:
+        return jsonify({"ok": False, "error": "Name or section is too long."}), 400
+    # Allow only plain-text characters so nothing student-supplied can inject
+    # markup into the teacher dashboard.
+    ALLOWED = r"^[A-Za-z0-9 .,'\-]+$"
+    if not re.match(ALLOWED, name) or not re.match(ALLOWED, section):
+        return jsonify({"ok": False, "error": "Name and section may only use letters, numbers, spaces, and . , ' -"}), 400
     if pw != os.environ.get("STUDENT_PASSWORD", "chem110"):
         return jsonify({"ok": False, "error": "Incorrect class password."}), 401
     session["student_auth"]    = True
