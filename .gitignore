@@ -20,3 +20,14 @@ logs/
 # macOS
 .DS_Store
 static/.DS_Store
+
+# Research, writeups & presentation artifacts (kept local, not part of the codebase)
+*.pptx
+*.docx
+~$*
+poster/
+ChemBot_Poster_Script.md
+ChemBot_Recorded_Script.md
+evaluate_hallucination.py
+eval_results.json
+sync_drive.py
