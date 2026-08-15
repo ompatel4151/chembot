@@ -476,10 +476,28 @@
     chatArea.appendChild(d); scrollBot();
   }
 
+  // Convert stray LaTeX (some models write equations this way) into plain, readable text.
+  function deLatex(s) {
+    return (s || '')
+      .replace(/\\?text\s*\{([^}]*)\}/g, '$1')
+      .replace(/\\?mathrm\s*\{([^}]*)\}/g, '$1')
+      .replace(/\\(?:longrightarrow|rightarrow|to)\b/g, ' → ')
+      .replace(/\\rightleftharpoons\b/g, ' ⇌ ')
+      .replace(/\\leftarrow\b/g, ' ← ')
+      .replace(/\\Delta\b/g, 'Δ').replace(/\\times\b/g, '×').replace(/\\cdot\b/g, '·')
+      .replace(/\\pm\b/g, '±').replace(/\\leq\b/g, '≤').replace(/\\geq\b/g, '≥')
+      .replace(/\\approx\b/g, '≈').replace(/\\neq\b/g, '≠')
+      .replace(/\^\{([^}]*)\}/g, '$1').replace(/_\{([^}]*)\}/g, '$1')
+      .replace(/_(\d)/g, '$1')
+      .replace(/\\(?:left|right|big|Big|,|;|!|:|\(|\)|\[|\])/g, '')
+      .replace(/\\[a-zA-Z]+/g, '')   // drop any remaining \command
+      .replace(/[$]/g, '');          // strip dollar-sign math delimiters
+  }
+
   function appendBot(html, topic) {
     const d = document.createElement('div');
     d.className = 'message bot';
-    const formatted = html
+    const formatted = deLatex(html)
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
       .replace(/\n/g, '<br>');
     const bubbleId = 'bubble-' + Date.now();
@@ -601,7 +619,7 @@
 
   // Strip markdown, emoji and symbols so the voice reads clean prose.
   function cleanForSpeech(text) {
-    return (text || '')
+    return deLatex(text || '')
       .replace(/```[\s\S]*?```/g, ' ')          // code blocks
       .replace(/`([^`]+)`/g, '$1')              // inline code
       .replace(/\*\*(.*?)\*\*/g, '$1')          // bold
