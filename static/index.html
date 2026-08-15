@@ -498,6 +498,8 @@
     const d = document.createElement('div');
     d.className = 'message bot';
     const formatted = deLatex(html)
+      .replace(/```+/g, '')                 // drop code fences
+      .replace(/`([^`]+)`/g, '$1')          // unwrap inline code → plain text
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
       .replace(/\n/g, '<br>');
     const bubbleId = 'bubble-' + Date.now();
