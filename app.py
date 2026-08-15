@@ -62,6 +62,9 @@ DIM_MATCH      = FAISS_READY and EMBEDDER_READY and (index_dim == EMBEDDER_DIM)
 
 groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
+# Chat model — overridable via env var so a future model swap needs no code change.
+CHAT_MODEL = os.environ.get("CHAT_MODEL", "openai/gpt-oss-120b")
+
 TOPIC_MAP = {
     "acid":          "Acids & Bases",
     "base":          "Acids & Bases",
@@ -312,7 +315,7 @@ def chat():
 
     try:
         response = groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=CHAT_MODEL,
             messages=messages,
             max_tokens=1000,
             temperature=0.3,
