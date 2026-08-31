@@ -23,12 +23,23 @@ CHUNK_SIZE = 900
 OVERLAP    = 200
 
 
+MIN_CHUNK_CHARS = 50   # drop slide-title fragments and stray OCR noise
+
+def is_useful_chunk(text: str) -> bool:
+    """Keep only chunks with real content: long enough and mostly letters/words."""
+    if len(text) < MIN_CHUNK_CHARS:
+        return False
+    letters = sum(c.isalpha() for c in text)
+    words   = [w for w in text.split() if len(w) > 1 and any(c.isalpha() for c in w)]
+    # reject garbled fragments that are mostly digits/symbols or too few real words
+    return letters >= 25 and len(words) >= 6
+
 def chunk_text(text: str):
     text = " ".join(text.split())   # normalize whitespace
     chunks, start = [], 0
     while start < len(text):
         chunk = text[start:start + CHUNK_SIZE].strip()
-        if chunk:
+        if chunk and is_useful_chunk(chunk):
             chunks.append(chunk)
         start += CHUNK_SIZE - OVERLAP
     return chunks
