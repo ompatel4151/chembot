@@ -340,6 +340,14 @@ def _serve_static_html(filename):
         content = f.read()
     return content, 200, {"Content-Type": "text/html; charset=utf-8"}
 
+@app.route("/logout", methods=["POST"])
+def logout():
+    # Clear student mode; keep any teacher session so the dashboard opens directly.
+    session.pop("student_auth", None)
+    session.pop("student_name", None)
+    session.pop("student_section", None)
+    return jsonify({"ok": True})
+
 @app.route("/student/login", methods=["POST"])
 def student_login():
     data    = request.get_json() or {}

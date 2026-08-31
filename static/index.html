@@ -286,6 +286,7 @@
       <div class="pill-dot" id="pill-dot"></div>
       <span id="pill-label">Connecting…</span>
     </div>
+    <button class="tts-toggle" id="logout-btn" title="Log out and go to the instructor dashboard">↩ Log out</button>
   </div>
 </header>
 
@@ -382,6 +383,15 @@
     }
   }
   idStartBtn.addEventListener('click', submitIdentity);
+
+  // Log out of student mode → go to the instructor dashboard (teacher session, if any, opens it directly)
+  document.getElementById('logout-btn').addEventListener('click', async () => {
+    try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch {}
+    try { await fetch('/logout', { method: 'POST' }); } catch {}
+    localStorage.removeItem('chembot_student');
+    localStorage.removeItem('chembot_section');
+    window.location.href = '/teacher';
+  });
   idName.addEventListener('keydown', e => { if (e.key === 'Enter') idSection.focus(); });
   idSection.addEventListener('keydown', e => { if (e.key === 'Enter') idPassword.focus(); });
   idPassword.addEventListener('keydown', e => { if (e.key === 'Enter') submitIdentity(); });
