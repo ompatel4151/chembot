@@ -12,9 +12,11 @@ Output:
 
 import os
 import pickle
+import re
 import numpy as np
 
 DATA_PATH  = "data"
+OCR_DIR    = os.path.join(DATA_PATH, "ocr_review")   # hand-checked text for scanned PDF pages
 VECTOR_DIR = "vectorstore"
 INDEX_FILE = os.path.join(VECTOR_DIR, "index.faiss")
 DOCS_FILE  = os.path.join(VECTOR_DIR, "docs.pkl")
@@ -34,26 +36,67 @@ def is_useful_chunk(text: str) -> bool:
     # reject garbled fragments that are mostly digits/symbols or too few real words
     return letters >= 25 and len(words) >= 6
 
+SENTENCE_END = re.compile(r"[.!?;:](?=\s)")
+
 def chunk_text(text: str):
+    """Split into overlapping chunks that break between sentences, or at worst between words."""
     text = " ".join(text.split())   # normalize whitespace
     chunks, start = [], 0
     while start < len(text):
-        chunk = text[start:start + CHUNK_SIZE].strip()
+        end = min(start + CHUNK_SIZE, len(text))
+        if end < len(text):
+            ends = [m.end() for m in SENTENCE_END.finditer(text, start + CHUNK_SIZE // 2, end + 1)]
+            space = text.rfind(" ", start + 1, end + 1)
+            end = ends[-1] if ends else (space if space != -1 else end)
+        chunk = text[start:end].strip()
         if chunk and is_useful_chunk(chunk):
             chunks.append(chunk)
-        start += CHUNK_SIZE - OVERLAP
+        if end >= len(text):
+            break
+        back = max(end - OVERLAP, start + 1)
+        sentence = SENTENCE_END.search(text, back, end)
+        space = text.find(" ", back, end)
+        start = sentence.end() + 1 if sentence else (space + 1 if space != -1 else end)
     return chunks
+
+
+def ocr_pages(filename: str):
+    """Hand-checked text for a PDF's scanned pages, as {page_num: text}."""
+    path = os.path.join(OCR_DIR, os.path.splitext(filename)[0] + ".txt")
+    if not os.path.exists(path):
+        return {}
+    with open(path, encoding="utf-8") as f:
+        parts = re.split(r"^--- page (\d+) ---$", f.read(), flags=re.M)
+    return {int(n): text.strip() for n, text in zip(parts[1::2], parts[2::2]) if text.strip()}
 
 
 def extract_pdf(path: str):
     from pypdf import PdfReader
     reader = PdfReader(path)
-    pages = []
+    pages = {}
     for i, page in enumerate(reader.pages):
         txt = (page.extract_text() or "").strip()
         if txt:
-            pages.append((i + 1, txt))
-    return pages   # list of (page_num, text)
+            pages[i + 1] = txt
+    pages.update(ocr_pages(os.path.basename(path)))
+    return sorted(pages.items())   # list of (page_num, text)
+
+
+def slide_lines(shapes):
+    from pptx.enum.shapes import MSO_SHAPE_TYPE
+    for shape in shapes:
+        if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
+            yield from slide_lines(shape.shapes)
+        elif getattr(shape, "has_table", False) and shape.has_table:
+            for row in shape.table.rows:
+                line = " | ".join(c.text.strip() for c in row.cells if c.text.strip())
+                if line:
+                    yield line
+        elif shape.has_text_frame:
+            for para in shape.text_frame.paragraphs:
+                line = para.text.strip()   # keeps subscripts attached: H2SO4, not H 2 SO 4
+                if line:
+                    yield line
 
 
 def extract_pptx(path: str):
@@ -61,13 +104,11 @@ def extract_pptx(path: str):
     prs = Presentation(path)
     pages = []
     for i, slide in enumerate(prs.slides):
-        texts = []
-        for shape in slide.shapes:
-            if shape.has_text_frame:
-                for para in shape.text_frame.paragraphs:
-                    line = " ".join(run.text for run in para.runs).strip()
-                    if line:
-                        texts.append(line)
+        texts = list(slide_lines(slide.shapes))
+        if slide.has_notes_slide and slide.notes_slide.notes_text_frame:
+            notes = slide.notes_slide.notes_text_frame.text.strip()
+            if notes:
+                texts.append(notes)
         combined = " ".join(texts).strip()
         if combined:
             pages.append((i + 1, combined))
@@ -77,7 +118,17 @@ def extract_pptx(path: str):
 def extract_docx(path: str):
     from docx import Document
     doc = Document(path)
-    text = " ".join(p.text for p in doc.paragraphs if p.text.strip())
+    parts = [p.text for p in doc.paragraphs if p.text.strip()]
+    for table in doc.tables:
+        for row in table.rows:
+            seen, cells = set(), []
+            for cell in row.cells:           # merged cells repeat in row.cells
+                if cell._tc not in seen and cell.text.strip():
+                    seen.add(cell._tc)
+                    cells.append(cell.text.strip())
+            if cells:
+                parts.append(" | ".join(cells))
+    text = " ".join(parts)
     return [(1, text)] if text.strip() else []
 
 
