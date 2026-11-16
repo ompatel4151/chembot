@@ -38,6 +38,15 @@ with tempfile.TemporaryDirectory() as tmp:
     assert ingest_free.ocr_pages("scan.pdf") == {2: "real text"}   # header and blank pages dropped
     assert ingest_free.ocr_pages("other.pdf") == {}
 
+    from pypdf import PdfWriter
+    w = PdfWriter()
+    w.add_blank_page(100, 100); w.add_blank_page(100, 100)
+    w.write(os.path.join(tmp, "scan.pdf"))
+    with open(os.path.join(tmp, "scan.txt"), "w", encoding="utf-8") as f:
+        f.write("--- page 2 ---\nENTHALPY\nfirst section\n\nHEAT OF FORMATION\nsecond section\n")
+    assert ingest_free.extract_pdf(os.path.join(tmp, "scan.pdf")) == [
+        (2, "ENTHALPY\nfirst section"), (2, "HEAT OF FORMATION\nsecond section")]   # one entry per section
+
 sentences = [f"Sentence number {i} talks about molar mass and limiting reagents." for i in range(60)]
 chunks = chunk_text(" ".join(sentences))
 assert all(len(c) <= 900 for c in chunks)

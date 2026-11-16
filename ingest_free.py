@@ -77,9 +77,11 @@ def extract_pdf(path: str):
     for i, page in enumerate(reader.pages):
         txt = (page.extract_text() or "").strip()
         if txt:
-            pages[i + 1] = txt
-    pages.update(ocr_pages(os.path.basename(path)))
-    return sorted(pages.items())   # list of (page_num, text)
+            pages[i + 1] = [txt]
+    for num, text in ocr_pages(os.path.basename(path)).items():
+        # blank lines in the hand-checked text mark sections; each is chunked on its own
+        pages[num] = [s for s in re.split(r"\n\s*\n", text) if s.strip()]
+    return [(num, s) for num, sections in sorted(pages.items()) for s in sections]   # list of (page_num, text)
 
 
 def slide_lines(shapes):
@@ -165,14 +167,16 @@ def main():
             print(f"   ⚠️  Skipped ({e})")
             continue
 
+        per_page = {}   # a page can arrive in several sections
         for page_num, text in pages:
-            for chunk_i, chunk in enumerate(chunk_text(text)):
+            for chunk in chunk_text(text):
+                per_page[page_num] = per_page.get(page_num, 0) + 1
                 docs.append({
                     "text": chunk,
                     "meta": {
                         "source_file": filename,
                         "page_number": page_num,
-                        "chunk_id":    f"{filename}_p{page_num}_c{chunk_i+1}"
+                        "chunk_id":    f"{filename}_p{page_num}_c{per_page[page_num]}"
                     }
                 })
 
