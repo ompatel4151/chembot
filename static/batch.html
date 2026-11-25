@@ -33,7 +33,7 @@
     table { width:100%; border-collapse:collapse; }
     th { text-align:left; font-size:0.68rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-light); padding:8px; border-bottom:1.5px solid var(--border); }
     td { padding:10px 8px; font-size:0.82rem; border-bottom:1px solid var(--border); vertical-align:top; }
-    td.ans { white-space:pre-wrap; }
+    td.ans, td.q { white-space:pre-wrap; }
     td.src { font-size:0.72rem; color:var(--text-mid); }
     .print-title { display:none; }
     @media (max-width:700px) { td.src, th.src { display:none; } }
@@ -90,11 +90,13 @@
   </div>
 </div>
 
+<script src="/static/delatex.js"></script>
 <script>
   const $ = id => document.getElementById(id);
   let questions = [], results = {}, key = '', fileName = '', running = false;
 
   const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const pages = r => [...new Set((r && r.sources) || [])].join('; ');   // each course page once
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   function status(msg, err) { $('status').textContent = msg; $('status').className = err ? 'err' : ''; }
   function save() { try { localStorage.setItem(key, JSON.stringify(results)); } catch (e) {} }
@@ -104,9 +106,9 @@
     const done = Object.keys(results).length;
     $('rows').innerHTML = questions.map((q, i) => {
       const r = results[i];
-      return `<tr><td>${i + 1}</td><td>${esc(q)}</td>
-        <td class="ans">${r ? esc(r.answer).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>') : '<span style="color:var(--text-light)">waiting</span>'}</td>
-        <td class="src">${r ? esc(r.sources.join('; ')) : ''}</td></tr>`;
+      return `<tr><td>${i + 1}</td><td class="q">${esc(q)}</td>
+        <td class="ans">${r ? esc(deLatex(r.answer)).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>') : '<span style="color:var(--text-light)">waiting</span>'}</td>
+        <td class="src">${r ? esc(pages(r)) : ''}</td></tr>`;
     }).join('');
     $('bar').style.width = questions.length ? (100 * done / questions.length) + '%' : 0;
     ['csv', 'pdf', 'clear'].forEach(id => $(id).disabled = !done || running);
@@ -164,7 +166,7 @@
     const lines = [['n', 'question', 'answer', 'retrieved_sources', 'model', 'time'].join(',')];
     questions.forEach((q, i) => {
       const r = results[i] || {};
-      lines.push([i + 1, q, r.answer, (r.sources || []).join('; '), r.model, r.time].map(cell).join(','));
+      lines.push([i + 1, q, r.answer && deLatex(r.answer), pages(r), r.model, r.time].map(cell).join(','));
     });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
