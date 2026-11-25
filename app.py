@@ -234,6 +234,50 @@ def search_top_k(query, k=5):
             print(f"Search error: {e}")
     return keyword_search(query, k)
 
+NOT_COVERED = ("That topic doesn't appear in our course material. Try asking about acids and bases, "
+               "pH, titrations, solutions, enthalpy, or intermolecular forces.")
+
+def ask_llm(question, retrieved, history=()):
+    """Answer a question from the retrieved course chunks (shared by /chat and the batch page)."""
+    context = "\n\n---\n\n".join(
+        f"[{d['meta'].get('source_file','?')} p.{d['meta'].get('page_number','?')}]\n{d['text']}"
+        for d in retrieved
+    )
+
+    system_prompt = (
+        "You are ChemBot, a helpful tutor for the Penn State Harrisburg Chem 110 course.\n"
+        "Rules:\n"
+        "1. Answer ONLY using the course material provided below. Do not use outside knowledge.\n"
+        "2. Always end your answer with a 'Source:' line naming the file(s) you used, taken from "
+        "the filenames in brackets (e.g. Source: Copy of Acids, Bases, pH Scale.pptx). If the "
+        "student asks where a topic comes from, name those files.\n"
+        "3. Use the material even if it is brief — piece together the relevant chunks to answer. "
+        "Only say a topic is not covered if none of the material below is relevant to it; in that "
+        "case say so and suggest a related Chem 110 topic.\n"
+        "4. Keep answers clear and concise. Use bullet points where it helps. "
+        "Do NOT use markdown tables; use bullet points or short labeled lines instead.\n"
+        "5. Write all chemical equations, formulas, and math in plain text using normal "
+        "characters and arrows (e.g. HCl(aq) + NaOH(aq) -> NaCl(aq) + H2O(l), or CO2, H2O). "
+        "Do NOT use LaTeX, backslash commands, or dollar signs.\n\n"
+        f"Course material:\n{context}"
+    )
+
+    messages = [{"role": "system", "content": system_prompt}]
+    for turn in history[-5:]:
+        role    = turn.get("role")
+        content = turn.get("content", "")
+        if role in ("user", "assistant") and content:
+            messages.append({"role": role, "content": content})
+    messages.append({"role": "user", "content": question})
+
+    response = groq_client.chat.completions.create(
+        model=CHAT_MODEL,
+        messages=messages,
+        max_tokens=1000,
+        temperature=0.3,
+    )
+    return response.choices[0].message.content
+
 @app.route("/transcribe", methods=["POST"])
 def transcribe():
     if "audio" not in request.files:
@@ -279,55 +323,13 @@ def chat():
         return jsonify({"reply": "No course material loaded. Run ingest_free.py first."})
 
     retrieved = search_top_k(question, k=5)
-    answered  = bool(retrieved)
-
-    log_question(student, section, question, topic, answered)
+    log_question(student, section, question, topic, bool(retrieved))
 
     if not retrieved:
-        return jsonify({
-            "reply": "That topic doesn't appear in our course material. Try asking about acids and bases, pH, titrations, solutions, enthalpy, or intermolecular forces.",
-            "topic": topic
-        })
-
-    context = "\n\n---\n\n".join(
-        f"[{d['meta'].get('source_file','?')} p.{d['meta'].get('page_number','?')}]\n{d['text']}"
-        for d in retrieved
-    )
-
-    system_prompt = (
-        "You are ChemBot, a helpful tutor for the Penn State Harrisburg Chem 110 course.\n"
-        "Rules:\n"
-        "1. Answer ONLY using the course material provided below. Do not use outside knowledge.\n"
-        "2. Always end your answer with a 'Source:' line naming the file(s) you used, taken from "
-        "the filenames in brackets (e.g. Source: Copy of Acids, Bases, pH Scale.pptx). If the "
-        "student asks where a topic comes from, name those files.\n"
-        "3. Use the material even if it is brief — piece together the relevant chunks to answer. "
-        "Only say a topic is not covered if none of the material below is relevant to it; in that "
-        "case say so and suggest a related Chem 110 topic.\n"
-        "4. Keep answers clear and concise. Use bullet points where it helps. "
-        "Do NOT use markdown tables; use bullet points or short labeled lines instead.\n"
-        "5. Write all chemical equations, formulas, and math in plain text using normal "
-        "characters and arrows (e.g. HCl(aq) + NaOH(aq) -> NaCl(aq) + H2O(l), or CO2, H2O). "
-        "Do NOT use LaTeX, backslash commands, or dollar signs.\n\n"
-        f"Course material:\n{context}"
-    )
-
-    messages = [{"role": "system", "content": system_prompt}]
-    for turn in history[-5:]:
-        role    = turn.get("role")
-        content = turn.get("content", "")
-        if role in ("user", "assistant") and content:
-            messages.append({"role": role, "content": content})
-    messages.append({"role": "user", "content": question})
+        return jsonify({"reply": NOT_COVERED, "topic": topic})
 
     try:
-        response = groq_client.chat.completions.create(
-            model=CHAT_MODEL,
-            messages=messages,
-            max_tokens=1000,
-            temperature=0.3,
-        )
-        reply = response.choices[0].message.content
+        reply = ask_llm(question, retrieved, history)
     except Exception as e:
         print(f"Groq error: {e}")
         return jsonify({"reply": f"Error reaching AI service: {str(e)[:120]}"}), 500
@@ -455,6 +457,47 @@ def teacher_data():
         "students":          student_map,
         "unanswered":        unanswered[-30:],
         "recent":            logs[-30:],
+    })
+
+# ── Batch questions: an instructor uploads a CSV and ChemBot answers every question ──
+@app.route("/teacher/batch")
+def batch_page():
+    return _serve_static_html("batch.html")
+
+@app.route("/teacher/batch/parse", methods=["POST"])
+def batch_parse():
+    if not session.get("teacher"):
+        return jsonify({"error": "Unauthorized"}), 401
+    import csv, io
+    text = request.files["file"].read().decode("utf-8-sig", errors="replace")
+    rows = list(csv.reader(io.StringIO(text)))
+    if not rows:
+        return jsonify({"questions": []})
+    header = [h.strip().lower() for h in rows[0]]
+    col = next((i for i, h in enumerate(header) if "question" in h), None)
+    if col is None:               # no header row: questions are in the first column
+        col, body = 0, rows
+    else:
+        body = rows[1:]
+    return jsonify({"questions": [r[col].strip() for r in body if len(r) > col and r[col].strip()]})
+
+@app.route("/teacher/batch/ask", methods=["POST"])
+def batch_ask():
+    # Same retrieval, prompt and model as /chat, with no history and no student logging.
+    if not session.get("teacher"):
+        return jsonify({"error": "Unauthorized"}), 401
+    question = ((request.get_json() or {}).get("question") or "").strip()
+    if not question:
+        return jsonify({"error": "Empty question"}), 400
+    retrieved = search_top_k(question, k=5)
+    try:
+        reply = ask_llm(question, retrieved) if retrieved else NOT_COVERED
+    except Exception as e:
+        return jsonify({"error": str(e)[:200]}), 503
+    return jsonify({
+        "answer":  reply,
+        "sources": [f"{d['meta'].get('source_file','?')} p{d['meta'].get('page_number','?')}" for d in retrieved],
+        "model":   CHAT_MODEL,
     })
 
 @app.route("/status")
