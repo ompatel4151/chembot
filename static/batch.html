@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ChemBot — Batch Questions</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --navy:#0f2044; --blue:#1e5cad; --blue-light:#2a7de1; --accent2:#f7c948;
+      --cream:#f7f8fc; --white:#fff; --text:#1a1e2e; --text-mid:#4a5568;
+      --text-light:#a0aec0; --border:#e2e8f0; --red:#e53e3e; --green:#2f855a;
+    }
+    body { font-family:'Inter',sans-serif; background:var(--cream); color:var(--text); }
+    header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 28px; background:var(--navy); }
+    .logo-title { font-size:1.15rem; font-weight:700; color:var(--accent2); }
+    .logo-sub { font-size:0.7rem; color:rgba(255,255,255,0.5); }
+    header a { color:rgba(255,255,255,0.75); font-size:0.78rem; text-decoration:none; }
+    .wrap { max-width:1120px; margin:0 auto; padding:24px 16px 60px; }
+    .panel { background:var(--white); border:1px solid var(--border); border-radius:16px; padding:20px 22px; margin-bottom:18px; }
+    .panel h3 { font-size:0.95rem; color:var(--navy); margin-bottom:6px; }
+    .hint { font-size:0.78rem; color:var(--text-mid); line-height:1.5; margin-bottom:14px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    button { padding:9px 16px; font:600 0.84rem 'Inter',sans-serif; color:white; background:var(--blue); border:none; border-radius:10px; cursor:pointer; }
+    button:hover { background:var(--blue-light); }
+    button:disabled { background:var(--text-light); cursor:default; }
+    button.ghost { background:var(--white); color:var(--blue); border:1.5px solid var(--border); }
+    #status { font-size:0.84rem; color:var(--text-mid); margin-top:12px; min-height:20px; }
+    #status.err { color:var(--red); }
+    .bar { height:8px; background:var(--cream); border-radius:6px; overflow:hidden; margin-top:10px; }
+    .bar div { height:100%; width:0; background:linear-gradient(90deg,var(--blue),#0ea5a0); transition:width .3s; }
+    table { width:100%; border-collapse:collapse; }
+    th { text-align:left; font-size:0.68rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-light); padding:8px; border-bottom:1.5px solid var(--border); }
+    td { padding:10px 8px; font-size:0.82rem; border-bottom:1px solid var(--border); vertical-align:top; }
+    td.ans { white-space:pre-wrap; }
+    td.src { font-size:0.72rem; color:var(--text-mid); }
+    .print-title { display:none; }
+    @media (max-width:700px) { td.src, th.src { display:none; } }
+    @media print {
+      header, .controls { display:none; }
+      body { background:white; }
+      .wrap { padding:0; max-width:none; }
+      .panel { border:none; padding:0; }
+      .print-title { display:block; font-size:0.8rem; color:var(--text-mid); margin-bottom:10px; }
+      td.src, th.src { display:table-cell; }
+      tr { break-inside:avoid; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="logo-title">Batch Questions</div>
+    <div class="logo-sub">Run a list of questions through ChemBot</div>
+  </div>
+  <a href="/teacher">← Dashboard</a>
+</header>
+
+<div class="wrap">
+  <div class="panel controls">
+    <h3>1. Choose a question file</h3>
+    <p class="hint">A CSV file with one question per row, in a column whose heading contains "question" (or in the first column).
+      From Excel or Google Sheets: File → Save As / Download → CSV. Each question is answered on its own, with no chat history,
+      and none of them are added to the student analytics.</p>
+    <input type="file" id="file" accept=".csv,text/csv"/>
+    <div id="status"></div>
+    <div class="bar"><div id="bar"></div></div>
+  </div>
+
+  <div class="panel controls">
+    <h3>2. Run and export</h3>
+    <p class="hint">Keep this tab open while it runs. Answers are saved in this browser as they arrive, so if the tab closes or the
+      run stops, choose the same file again and press Start to continue where it left off.</p>
+    <div class="row">
+      <button id="start" disabled>Start</button>
+      <button id="pause" class="ghost" disabled>Pause</button>
+      <button id="csv" class="ghost" disabled>Export CSV</button>
+      <button id="pdf" class="ghost" disabled>Export PDF</button>
+      <button id="clear" class="ghost" disabled>Clear saved answers</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="print-title" id="print-title"></div>
+    <table>
+      <thead><tr><th>#</th><th>Question</th><th>ChemBot answer</th><th class="src">Course pages retrieved</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  const $ = id => document.getElementById(id);
+  let questions = [], results = {}, key = '', fileName = '', running = false;
+
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  function status(msg, err) { $('status').textContent = msg; $('status').className = err ? 'err' : ''; }
+  function save() { try { localStorage.setItem(key, JSON.stringify(results)); } catch (e) {} }
+  function load() { try { return JSON.parse(localStorage.getItem(key)) || {}; } catch (e) { return {}; } }
+
+  function render() {
+    const done = Object.keys(results).length;
+    $('rows').innerHTML = questions.map((q, i) => {
+      const r = results[i];
+      return `<tr><td>${i + 1}</td><td>${esc(q)}</td>
+        <td class="ans">${r ? esc(r.answer).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>') : '<span style="color:var(--text-light)">waiting</span>'}</td>
+        <td class="src">${r ? esc(r.sources.join('; ')) : ''}</td></tr>`;
+    }).join('');
+    $('bar').style.width = questions.length ? (100 * done / questions.length) + '%' : 0;
+    ['csv', 'pdf', 'clear'].forEach(id => $(id).disabled = !done || running);
+    $('start').disabled = running || !questions.length || done === questions.length;
+    $('pause').disabled = !running;
+    $('print-title').textContent = `ChemBot answers · ${fileName} · ${done} of ${questions.length} questions`;
+  }
+
+  $('file').addEventListener('change', async () => {
+    const f = $('file').files[0];
+    if (!f) return;
+    const body = new FormData(); body.append('file', f);
+    const r = await fetch('/teacher/batch/parse', { method: 'POST', body });
+    if (r.status === 401) return status('Please log in on the instructor dashboard first, then come back to this page.', true);
+    questions = (await r.json()).questions || [];
+    fileName = f.name;
+    key = 'chembot-batch:' + f.name + ':' + questions.length;
+    results = load();
+    const done = Object.keys(results).length;
+    status(questions.length ? `${questions.length} questions found` + (done ? `, ${done} already answered.` : '.') : 'No questions found in this file.', !questions.length);
+    render();
+  });
+
+  $('start').addEventListener('click', async () => {
+    running = true; render();
+    for (let i = 0; i < questions.length && running; i++) {
+      if (results[i]) continue;
+      status(`Answering question ${i + 1} of ${questions.length}…`);
+      let ok = false;
+      for (let attempt = 1; attempt <= 6 && running; attempt++) {
+        try {
+          const r = await fetch('/teacher/batch/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: questions[i] }) });
+          if (r.status === 401) { running = false; status('Your session ended. Log in on the instructor dashboard again, then press Start.', true); break; }
+          if (r.ok) {
+            const d = await r.json();
+            results[i] = { answer: d.answer, sources: d.sources, model: d.model, time: new Date().toISOString() };
+            save(); render(); ok = true; break;
+          }
+        } catch (e) {}
+        // Usually the AI service's rate limit: wait longer each time, then retry.
+        const wait = 30 * attempt;
+        for (let s = wait; s > 0 && running; s--) { status(`Question ${i + 1}: the AI service is busy, retrying in ${s}s (attempt ${attempt} of 6)…`); await sleep(1000); }
+      }
+      if (!ok) { if (running) status(`Stopped at question ${i + 1}. Wait a few minutes (or until tomorrow if the daily limit was reached), then press Start to continue.`, true); running = false; break; }
+      await sleep(2000);   // stay under the AI service's per-minute limit
+    }
+    if (Object.keys(results).length === questions.length) status(`All ${questions.length} questions answered. Export them below.`);
+    running = false; render();
+  });
+
+  $('pause').addEventListener('click', () => { running = false; status('Paused. Press Start to continue.'); render(); });
+
+  $('csv').addEventListener('click', () => {
+    const cell = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+    const lines = [['n', 'question', 'answer', 'retrieved_sources', 'model', 'time'].join(',')];
+    questions.forEach((q, i) => {
+      const r = results[i] || {};
+      lines.push([i + 1, q, r.answer, (r.sources || []).join('; '), r.model, r.time].map(cell).join(','));
+    });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+    a.download = 'ChemBot answers - ' + fileName.replace(/\.csv$/i, '') + '.csv';
+    a.click();
+  });
+
+  $('pdf').addEventListener('click', () => window.print());   // choose "Save as PDF" in the print dialog
+
+  $('clear').addEventListener('click', () => {
+    if (!confirm('Delete the saved answers for this file from this browser? Export them first if you need them.')) return;
+    try { localStorage.removeItem(key); } catch (e) {}
+    results = {}; status('Saved answers cleared.'); render();
+  });
+</script>
+</body>
+</html>
